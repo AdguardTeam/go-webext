@@ -1,0 +1,77 @@
+---
+version: 2
+plan:
+  project-key: ADGEXT
+  key: GOWEBEXT
+  name: gowebext
+variables:
+  dockerGo: golang:1.19
+  dockerLint: golangci/golangci-lint:v1.49.0
+
+stages:
+  - Test:
+      manual: false
+      final: false
+      jobs:
+        - Test
+
+  - Lint:
+      manual: false
+      final: false
+      jobs:
+        - Lint
+
+Test:
+  docker:
+    image: ${bamboo.dockerGo}
+    volumes:
+      ${system.GO_CACHE_DIR}: "${bamboo.cacheGo}"
+      ${system.GO_PKG_CACHE_DIR}: "${bamboo.cacheGoPkg}"
+  key: TEST
+  other:
+    clean-working-dir: true
+  tasks:
+    - checkout:
+        force-clean-build: 'true'
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            go test ./...
+  final-tasks:
+    - clean
+  requirements:
+    - adg-docker: 'true'
+
+Lint:
+  docker:
+    image: ${bamboo.dockerLint}
+    volumes:
+      ${system.GO_CACHE_DIR}: "${bamboo.cacheGo}"
+      ${system.GO_PKG_CACHE_DIR}: "${bamboo.cacheGoPkg}"
+      ${bamboo.build.working.directory}: "/app"
+  key: LINT
+  other:
+    clean-working-dir: true
+  tasks:
+    - checkout:
+        force-clean-build: 'true'
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            golangci-lint run -v
+  requirements:
+    - adg-docker: 'true'
+
+branches:
+  create: for-pull-request
+  delete:
+    after-deleted-days: '1'
+    after-inactive-days: '5'
+  link-to-jira: 'true'
+
+notifications: [ ]
+labels: [ ]
+other:
+  concurrent-build-plugin: system-default
