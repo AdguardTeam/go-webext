@@ -6,7 +6,7 @@ plan:
   name: gowebext
 variables:
   dockerGo: golang:1.19
-  dockerLint: golangci/golangci-lint:v1.49.0
+  dockerLint: golangci/golangci-lint:v1.48.0
 
 stages:
   - Test:
@@ -37,6 +37,13 @@ Test:
         interpreter: SHELL
         scripts:
           - |-
+            set -x
+            set -e
+            ls -al
+
+            # Fix mixed logs
+            exec 2>&1
+
             go test ./...
   final-tasks:
     - clean
@@ -60,6 +67,13 @@ Lint:
         interpreter: SHELL
         scripts:
           - |-
+            set -x
+            set -e
+            ls -al
+
+            # Fix mixed logs
+            exec 2>&1
+
             golangci-lint run -v
   requirements:
     - adg-docker: 'true'
