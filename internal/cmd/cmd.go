@@ -74,9 +74,9 @@ func getFirefoxStore() (*firefox.Store, error) {
 
 func getEdgeStore() (*edge.Store, error) {
 	type config struct {
-		ClientID     string `env:"EDGE_CLIENT_ID,notEmpty"`
-		ClientSecret string `env:"EDGE_CLIENT_SECRET,notEmpty"`
-		AccessToken  string `env:"EDGE_ACCESS_TOKEN,notEmpty"`
+		ClientID       string `env:"EDGE_CLIENT_ID,notEmpty"`
+		ClientSecret   string `env:"EDGE_CLIENT_SECRET,notEmpty"`
+		AccessTokenURL string `env:"EDGE_ACCESS_TOKEN_URL,notEmpty"`
 	}
 
 	cfg := config{}
@@ -84,13 +84,15 @@ func getEdgeStore() (*edge.Store, error) {
 		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
 	}
 
-	client, err := edge.NewClient(
-		cfg.ClientID,
-		cfg.ClientSecret,
-		cfg.AccessToken,
-	)
+	accessTokenURL, err := url.Parse(cfg.AccessTokenURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize Edge Store Client: %w", err)
+		return nil, fmt.Errorf("failed to parse access token URL: %w", err)
+	}
+
+	client := edge.Client{
+		ClientID:       cfg.ClientID,
+		ClientSecret:   cfg.ClientSecret,
+		AccessTokenURL: accessTokenURL,
 	}
 
 	store := edge.Store{
@@ -196,6 +198,25 @@ func Main() { //nolint:gocyclo
 					},
 				},
 				{
+					Name:  "edge",
+					Usage: "inserts new extension to the edge store",
+					Action: func(c *cli.Context) error {
+						store, err := getEdgeStore()
+						if err != nil {
+							return fmt.Errorf("initializing edge store: %w", err)
+						}
+
+						result, err := store.Insert()
+						if err != nil {
+							return fmt.Errorf("inserting extension: %w", err)
+						}
+
+						fmt.Println(result)
+
+						return nil
+					},
+				},
+				{
 					Name:  "firefox",
 					Usage: "inserts new extension to the firefox store",
 					Flags: []cli.Flag{
@@ -215,6 +236,8 @@ func Main() { //nolint:gocyclo
 						if err != nil {
 							return fmt.Errorf("inserting extension: %w", err)
 						}
+
+						fmt.Println("extension inserted")
 
 						return nil
 					},
@@ -246,7 +269,7 @@ func Main() { //nolint:gocyclo
 							return fmt.Errorf("updating extension: %w", err)
 						}
 
-						fmt.Println(result)
+						fmt.Printf("updated: %v", result)
 
 						return nil
 					},
@@ -271,6 +294,8 @@ func Main() { //nolint:gocyclo
 						if err != nil {
 							return fmt.Errorf("updating extension: %w", err)
 						}
+
+						fmt.Println("extension updated")
 
 						return nil
 					},
@@ -389,6 +414,6 @@ func Main() { //nolint:gocyclo
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatalf("failed to run app: %s", err)
+		log.Fatalf("error occurred: %s", err)
 	}
 }

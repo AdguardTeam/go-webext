@@ -64,8 +64,14 @@ func TestAuthorize(t *testing.T) {
 		require.NoError(t, err)
 	}))
 
-	client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
+
+	client := edge.Client{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		AccessTokenURL: accessTokenURL,
+	}
 
 	actualAccessToken, err := client.Authorize()
 	require.NoError(t, err)
@@ -81,8 +87,14 @@ func TestUploadUpdate(t *testing.T) {
 	authServer := newAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
+
+	client := edge.Client{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		AccessTokenURL: accessTokenURL,
+	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(http.MethodPost, r.Method)
@@ -124,7 +136,7 @@ func TestUploadStatus(t *testing.T) {
 		ID:              "{operationID}",
 		CreatedTime:     "Date Time",
 		LastUpdatedTime: "Date Time",
-		Status:          "Failed",
+		Status:          edge.StatusFailed,
 		Message:         "Error Message.",
 		ErrorCode:       "Error Code",
 		Errors:          []edge.StatusError{{Message: "test error"}},
@@ -133,8 +145,14 @@ func TestUploadStatus(t *testing.T) {
 	authServer := newAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
+
+	client := edge.Client{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		AccessTokenURL: accessTokenURL,
+	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
@@ -170,7 +188,7 @@ func TestUpdate(t *testing.T) {
 			ID:              "",
 			CreatedTime:     "",
 			LastUpdatedTime: "",
-			Status:          edge.Succeeded.String(),
+			Status:          edge.StatusSucceeded,
 			Message:         "",
 			ErrorCode:       "",
 			Errors:          nil,
@@ -179,8 +197,14 @@ func TestUpdate(t *testing.T) {
 		authServer := newAuthServer(t, accessToken)
 		defer authServer.Close()
 
-		client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
+
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
 
 		counter := 0
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +214,7 @@ func TestUpdate(t *testing.T) {
 						ID:              "",
 						CreatedTime:     "",
 						LastUpdatedTime: "",
-						Status:          edge.InProgress.String(),
+						Status:          edge.StatusInProgress,
 						Message:         "",
 						ErrorCode:       "",
 						Errors:          nil,
@@ -248,8 +272,14 @@ func TestUpdate(t *testing.T) {
 		authServer := newAuthServer(t, accessToken)
 		defer authServer.Close()
 
-		client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
+
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "submissions/draft/package/operations") {
@@ -257,7 +287,7 @@ func TestUpdate(t *testing.T) {
 					ID:              "",
 					CreatedTime:     "",
 					LastUpdatedTime: "",
-					Status:          edge.InProgress.String(),
+					Status:          edge.StatusInProgress,
 					Message:         "",
 					ErrorCode:       "",
 					Errors:          nil,
@@ -294,8 +324,14 @@ func TestPublishExtension(t *testing.T) {
 	authServer := newAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
+
+	client := edge.Client{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		AccessTokenURL: accessTokenURL,
+	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions", r.URL.Path)
@@ -337,8 +373,14 @@ func TestPublishStatus(t *testing.T) {
 	authServer := newAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client, err := edge.NewClient(clientID, clientSecret, authServer.URL)
+	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
+
+	client := edge.Client{
+		ClientID:       clientID,
+		ClientSecret:   clientSecret,
+		AccessTokenURL: accessTokenURL,
+	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)

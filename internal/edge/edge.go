@@ -25,20 +25,6 @@ type Client struct {
 	AccessTokenURL *url.URL
 }
 
-// NewClient creates a new edge Client instance.
-func NewClient(clientID, clientSecret, rawAccessTokenURL string) (client Client, err error) {
-	accessTokenURL, err := url.Parse(rawAccessTokenURL)
-	if err != nil {
-		return Client{}, fmt.Errorf("parsing access token from URL: %s, error: %w", rawAccessTokenURL, err)
-	}
-
-	return Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}, nil
-}
-
 // AuthorizeResponse describes the response received from the Edge Store
 // authorization request.
 type AuthorizeResponse struct {
@@ -96,26 +82,56 @@ type Store struct {
 type Status int64
 
 const (
-	// InProgress status is returned when update or publish are in progress yet.
-	InProgress Status = iota
-	// Succeeded status is returned when update or publish were successful.
-	Succeeded
-	// Failed status is returned when update or publish were failed.
-	Failed
+	// StatusInvalid status for default value
+	StatusInvalid Status = iota
+	// StatusInProgress status is returned when update or publish are in progress yet.
+	StatusInProgress
+	// StatusSucceeded status is returned when update or publish were successful.
+	StatusSucceeded
+	// StatusFailed status is returned when update or publish were failed.
+	StatusFailed
 )
 
 // String returns the string representation of the status.
-func (u Status) String() string {
-	switch u {
-	case InProgress:
+func (s Status) String() string {
+	switch s {
+	case StatusInProgress:
 		return "InProgress"
-	case Succeeded:
+	case StatusSucceeded:
 		return "Succeeded"
-	case Failed:
+	case StatusFailed:
 		return "Failed"
 	}
 
-	return "unknown"
+	return fmt.Sprintf("!bad_status_%d", s)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface for status
+func (s *Status) UnmarshalJSON(data []byte) error {
+	var status string
+
+	err := json.Unmarshal(data, &status)
+	if err != nil {
+		return fmt.Errorf("can't unmarshal status: %w", err)
+	}
+
+	switch status {
+	case "InProgress":
+		*s = StatusInProgress
+	case "Succeeded":
+		*s = StatusSucceeded
+	case "Failed":
+		*s = StatusFailed
+	default:
+		return fmt.Errorf("unknown status: %s", status)
+	}
+
+	return nil
+}
+
+// MarshalJSON implements the json.Marshaler interface for status
+func (s Status) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
 }
 
 // StatusError represents the error returned by the edge store.
@@ -128,7 +144,7 @@ type UploadStatusResponse struct {
 	ID              string        `json:"id"`
 	CreatedTime     string        `json:"createdTime"`
 	LastUpdatedTime string        `json:"lastUpdatedTime"`
-	Status          string        `json:"status"`
+	Status          Status        `json:"status"`
 	Message         string        `json:"message"`
 	ErrorCode       string        `json:"errorCode"`
 	Errors          []StatusError `json:"errors"`
@@ -138,6 +154,11 @@ type UploadStatusResponse struct {
 type UpdateOptions struct {
 	RetryTimeout      time.Duration
 	WaitStatusTimeout time.Duration
+}
+
+// Insert returns error, because edge store doesn't support insert.
+func (s Store) Insert() (result []byte, err error) {
+	return nil, errors.Error("there is no API for creating a new store item. you must complete these tasks manually in Microsoft Partner Center")
 }
 
 // Update uploads the update to the store and waits for the update to be processed.
@@ -176,18 +197,18 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 			)
 		}
 
-		if status.Status == InProgress.String() {
+		if status.Status == StatusInProgress {
 			log.Debug("update is in progress, retry in: %s", updateOptions.RetryTimeout)
 			time.Sleep(updateOptions.RetryTimeout)
 
 			continue
 		}
 
-		if status.Status == Succeeded.String() {
+		if status.Status == StatusSucceeded {
 			return status, nil
 		}
 
-		if status.Status == Failed.String() {
+		if status.Status == StatusFailed {
 			return nil, fmt.Errorf("update failed due to %s, full error %+v", status.Message, status)
 		}
 	}
@@ -373,7 +394,7 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", responseBody, err)
 	}
 
-	if response.Status == Failed.String() {
+	if response.Status == StatusFailed.String() {
 		return nil, fmt.Errorf("publish failed due to: \"%s\", full error: %+v", response.Message, response)
 	}
 

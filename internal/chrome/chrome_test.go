@@ -136,10 +136,10 @@ func TestStatus(t *testing.T) {
 func TestInsert(t *testing.T) {
 	assert := assert.New(t)
 
-	insertResponse := chrome.InsertResponse{
+	insertResponse := chrome.ItemResource{
 		Kind:        "chromewebstore#item",
 		ID:          "lcfmdcpihnaincdpgibhlncnekofobkc",
-		UploadState: "SUCCESS",
+		UploadState: chrome.UploadStateSuccess,
 	}
 
 	authServer := createAuthServer(t, accessToken)
@@ -162,11 +162,7 @@ func TestInsert(t *testing.T) {
 
 		assert.Equal("test file", string(body))
 
-		expectedJSON, err := json.Marshal(map[string]string{
-			"kind":        insertResponse.Kind,
-			"id":          insertResponse.ID,
-			"uploadState": insertResponse.UploadState,
-		})
+		expectedJSON, err := json.Marshal(insertResponse)
 		require.NoError(t, err)
 
 		_, err = w.Write(expectedJSON)
@@ -191,10 +187,10 @@ func TestInsert(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	assert := assert.New(t)
 
-	updateResponse := chrome.UpdateResponse{
+	updateResponse := chrome.ItemResource{
 		Kind:        "test kind",
 		ID:          appID,
-		UploadState: "test success",
+		UploadState: chrome.UploadStateSuccess,
 	}
 
 	authServer := createAuthServer(t, accessToken)

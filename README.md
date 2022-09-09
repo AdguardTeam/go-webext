@@ -75,22 +75,58 @@ webext [global options] command [command options] [arguments...]
 
 ##### Status:
 
-To get status of the extension in the Chrome store:
+Examples to get extension status info from the stores:
+
+###### Chrome Web Store
 
 ```sh
-webext status chrome --app bjefoaoblohljkbmkfjcpkgfamdadogp
+./go-webext status chrome --app bjefoaoblohljkadffjcpkgfamdadogp
 ```
 
-To get status of the extension in the Firefox store:
+###### Addons Mozilla Org
 
 ```sh
-webext status firefox --app sample@example.org
+./go-webext status firefox --app sample@example.org
 ```
 
-To upload new extension to the Mozilla store:
+##### Insert:
+Examples of commands to upload new extension (not uploaded before) to the stores:
+
+###### Addons Mozilla Org
 
 ```sh
-webext insert firefox -f /path/to/file -s /path/to/source
+./go-webext insert firefox -f ./firefox.zip -s ./source.zip
+```
+
+###### Chrome Web Store
+
+```sh
+./go-webext insert chrome -f ./chrome.zip
+```
+
+###### Microsoft Edge Addons Store
+
+There is no API for creating a new product. You must complete these tasks manually in Microsoft Partner Center.
+
+##### Update:
+Examples of commands to upload new version of extension to the stores:
+
+###### Addons Mozilla Org
+
+```sh
+./go-webext update firefox -f ./firefox.zip -s ./source.zip
+```
+
+###### Chrome Web Store
+
+```sh
+./go-webext update chrome -f ./chrome.zip -a bjefoaoblohljkaaaajcpkgfamdadogp
+```
+
+###### Microsoft Edge Addons Store
+
+```sh
+./go-webext update edge -f ./edge.zip -a 7a933b66-f8ff-4292-bc88-db593afg4bf8
 ```
 
 ## Planned features

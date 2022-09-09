@@ -419,8 +419,13 @@ func (s *Store) AwaitValidation(appID, version string) (err error) {
 		if err != nil {
 			return fmt.Errorf("getting upload status: %w", err)
 		}
+
 		if uploadStatus.Processed {
-			log.Debug("extension upload processed successfully")
+			if uploadStatus.Valid {
+				log.Debug("extension upload processed successfully")
+			} else {
+				return fmt.Errorf("not valid, validation url: %s", uploadStatus.ValidationURL)
+			}
 			break
 		} else {
 			log.Debug("upload not processed yet, retrying in: %s", retryInterval)
@@ -534,6 +539,7 @@ func (s *Store) Insert(filepath, sourcepath string) (err error) {
 		return fmt.Errorf("[Insert] wasn't able to get version ID: %s, version: %s, due to: %w", appID, version, err)
 	}
 
+	// TODO(maximtop): make source upload optional
 	_, err = s.UploadSource(appID, versionID, sourcepath)
 	if err != nil {
 		return fmt.Errorf("[Insert] wasn't able to upload source: %s, version: %s, sourcepath: %s, due to: %w", appID, version, sourcepath, err)

@@ -125,15 +125,98 @@ func (s *Store) Status(appID string) (result []byte, err error) {
 	return body, nil
 }
 
-// InsertResponse describes structure returned on the insert request.
-type InsertResponse struct {
-	Kind        string `json:"kind"`
-	ID          string `json:"id"`
-	UploadState string `json:"uploadState"`
+// UploadState describes the state of request.
+type UploadState uint8
+
+const (
+	// UploadStateInvalid default invalid state.
+	UploadStateInvalid UploadState = iota
+	// UploadStateSuccess means that the request was successful.
+	UploadStateSuccess
+	// UploadStateFailure means that the request failed.
+	UploadStateFailure
+	// UploadStateInProgress means that the request is in progress.
+	UploadStateInProgress
+	// UploadStateNotFound means that the item was not found.
+	UploadStateNotFound
+)
+
+// String returns the string representation of the .
+func (u UploadState) String() string {
+	switch u {
+	case UploadStateSuccess:
+		return "SUCCESS"
+	case UploadStateFailure:
+		return "FAILURE"
+	case UploadStateInProgress:
+		return "IN_PROGRESS"
+	case UploadStateNotFound:
+		return "NOT_FOUND"
+	}
+
+	return fmt.Sprintf("!bad_status_%d", u)
+}
+
+// UnmarshalJSON unmarshals the string representation of the UploadState type
+func (u *UploadState) UnmarshalJSON(data []byte) error {
+	var state string
+
+	err := json.Unmarshal(data, &state)
+	if err != nil {
+		return err
+	}
+
+	switch state {
+	case "SUCCESS":
+		*u = UploadStateSuccess
+	case "FAILURE":
+		*u = UploadStateFailure
+	case "IN_PROGRESS":
+		*u = UploadStateInProgress
+	case "NOT_FOUND":
+		*u = UploadStateNotFound
+	default:
+		return fmt.Errorf("unknown upload state: %q", state)
+	}
+
+	return nil
+}
+
+// MarshalJSON marshals the UploadState type to string.
+func (u UploadState) MarshalJSON() ([]byte, error) {
+	fmt.Printf("marshaling %s", u.String())
+	return json.Marshal(u.String())
+}
+
+// ItemError error provides details of the error
+type ItemError struct {
+	ErrorCode   string `json:"error_code"`
+	ErrorDetail string `json:"error_detail"`
+}
+
+// ItemResource describes structure returned on the update and insert requests.
+// Error example:
+//
+//	{
+//		"kind": "chromewebstore#item",
+//		"id": "null",
+//		"uploadState": "FAILURE",
+//		"itemError": [
+//			{
+//				"error_code": "PKG_MANIFEST_PARSE_ERROR",
+//				"error_detail": "The minimum Chrome version of 79.0 does not meet the minimum requirement to be published. To be published, a manifest V3 item must require at least Chrome version 88."
+//			}
+//		]
+//	}
+type ItemResource struct {
+	Kind        string      `json:"kind"`
+	ID          string      `json:"id"`
+	UploadState UploadState `json:"uploadState"`
+	ItemError   []ItemError `json:"itemError"`
 }
 
 // Insert uploads a package to create a new store item.
-func (s *Store) Insert(filePath string) (result *InsertResponse, err error) {
+func (s *Store) Insert(filePath string) (result *ItemResource, err error) {
 	const apiPath = "upload/chromewebstore/v1.1/items"
 	apiURL := s.URL.JoinPath(apiPath).String()
 
@@ -176,18 +259,15 @@ func (s *Store) Insert(filePath string) (result *InsertResponse, err error) {
 		return nil, fmt.Errorf("unmarshaling response body: %w", err)
 	}
 
+	if result.UploadState != UploadStateSuccess {
+		return nil, fmt.Errorf("non success upload state received: %v, %v", result.UploadState, result.ItemError)
+	}
+
 	return result, nil
 }
 
-// UpdateResponse describes response returned on update request.
-type UpdateResponse struct {
-	Kind        string `json:"kind"`
-	ID          string `json:"id"`
-	UploadState string `json:"uploadState"`
-}
-
 // Update uploads new version of the package to the store.
-func (s *Store) Update(appID, filePath string) (result *UpdateResponse, err error) {
+func (s *Store) Update(appID, filePath string) (result *ItemResource, err error) {
 	const apiPath = "upload/chromewebstore/v1.1/items/"
 	apiURL := s.URL.JoinPath(apiPath, appID).String()
 
@@ -228,6 +308,10 @@ func (s *Store) Update(appID, filePath string) (result *UpdateResponse, err erro
 	err = json.Unmarshal(responseBody, &result)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshaling response body: %w", err)
+	}
+
+	if result.UploadState == UploadStateFailure {
+		return nil, fmt.Errorf("failure in response: %v", result.ItemError)
 	}
 
 	return result, nil
