@@ -2,6 +2,7 @@
 package edge
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -154,12 +155,16 @@ type UploadStatusResponse struct {
 type UpdateOptions struct {
 	RetryTimeout      time.Duration
 	WaitStatusTimeout time.Duration
+	UploadTimeout     time.Duration
 }
 
 // Insert returns error, because edge store doesn't support insert.
 func (s Store) Insert() (result []byte, err error) {
 	return nil, errors.Error("there is no API for creating a new store item. you must complete these tasks manually in Microsoft Partner Center")
 }
+
+// DefaultUploadTimeout is the default timeout for the upload.
+const DefaultUploadTimeout = 1 * time.Minute
 
 // Update uploads the update to the store and waits for the update to be processed.
 func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (result *UploadStatusResponse, err error) {
@@ -174,7 +179,14 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 		updateOptions.WaitStatusTimeout = defaultWaitStatusTimeout
 	}
 
-	operationID, err := s.UploadUpdate(appID, filepath)
+	if updateOptions.UploadTimeout == 0 {
+		updateOptions.UploadTimeout = DefaultUploadTimeout
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(updateOptions.UploadTimeout))
+	defer cancel()
+
+	operationID, err := s.UploadUpdate(ctx, appID, filepath)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"[Update] failed to upload update for appID: %s, with filepath: %q, due to error: %w", appID, filepath, err,
@@ -215,8 +227,9 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 }
 
 // UploadUpdate uploads the update to the store.
-func (s Store) UploadUpdate(appID, filePath string) (result string, err error) {
+func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result string, err error) {
 	const apiPath = "/v1/products"
+
 	apiURL := s.URL.JoinPath(apiPath, appID, "submissions/draft/package").String()
 
 	file, err := os.Open(filepath.Clean(filePath))
@@ -230,7 +243,7 @@ func (s Store) UploadUpdate(appID, filePath string) (result string, err error) {
 		}
 	}()
 
-	req, err := http.NewRequest(http.MethodPost, apiURL, file)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, file)
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
@@ -243,7 +256,7 @@ func (s Store) UploadUpdate(appID, filePath string) (result string, err error) {
 	req.Header.Add("Authorization", "Bearer "+accessToken)
 	req.Header.Add("Content-Type", "application/zip")
 
-	client := http.Client{Timeout: requestTimeout}
+	client := http.Client{}
 
 	res, err := client.Do(req)
 	if err != nil {

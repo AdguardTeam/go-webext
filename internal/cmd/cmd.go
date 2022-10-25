@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/adguardteam/go-webext/internal/edge"
@@ -120,6 +121,12 @@ func Main() { //nolint:gocyclo
 	appFlag := &cli.StringFlag{Name: "app", Aliases: []string{"a"}, Required: true}
 	fileFlag := &cli.StringFlag{Name: "file", Aliases: []string{"f"}, Required: true}
 	sourceFlag := &cli.StringFlag{Name: "source", Aliases: []string{"s"}, Required: true}
+	timeoutFlag := &cli.IntFlag{
+		Name:        "timeout",
+		Aliases:     []string{"t"},
+		Usage:       "timeout in seconds",
+		DefaultText: fmt.Sprintf("%ds", int(edge.DefaultUploadTimeout.Seconds())),
+	}
 
 	app.Commands = []*cli.Command{
 		{
@@ -306,6 +313,7 @@ func Main() { //nolint:gocyclo
 					Flags: []cli.Flag{
 						fileFlag,
 						appFlag,
+						timeoutFlag,
 					},
 					Action: func(c *cli.Context) error {
 						store, err := getEdgeStore()
@@ -315,8 +323,11 @@ func Main() { //nolint:gocyclo
 
 						filepath := c.String("file")
 						appID := c.String("app")
+						timeout := c.Int("timeout")
 
-						result, err := store.Update(appID, filepath, edge.UpdateOptions{})
+						result, err := store.Update(appID, filepath, edge.UpdateOptions{
+							UploadTimeout: time.Duration(timeout) * time.Second,
+						})
 						if err != nil {
 							return fmt.Errorf("updating extension: %w", err)
 						}

@@ -91,14 +91,24 @@ type Store struct {
 	URL    *url.URL
 }
 
+type gecko struct {
+	ID string `json:"id"`
+}
+
+type applications struct {
+	Gecko gecko `json:"gecko"`
+}
+
+type browserSpecificSettings struct {
+	Gecko gecko `json:"gecko"`
+}
+
 // Manifest describes required fields parsed from the manifest.
+// extensions might have either "applications" or "browser_specific_settings"
 type Manifest struct {
-	Version      string `json:"version"`
-	Applications struct {
-		Gecko struct {
-			ID string `json:"id"`
-		} `json:"gecko"`
-	} `json:"applications"`
+	Version                 string                  `json:"version"`
+	Applications            applications            `json:"applications"`
+	BrowserSpecificSettings browserSpecificSettings `json:"browser_specific_settings"`
 }
 
 // parseManifest reads zip archive, and extracts manifest.json out of it.
@@ -114,6 +124,36 @@ func parseManifest(zipFilepath string) (result Manifest, err error) {
 	}
 
 	return result, nil
+}
+
+// extensionData various form of different extension data extracted from manifest.
+type extensionData struct {
+	appID   string
+	version string
+}
+
+// extDataFromFile retrieves extensionData from manifest and validates it.
+func extDataFromFile(zipFilepath string) (*extensionData, error) {
+	manifest, err := parseManifest(zipFilepath)
+	if err != nil {
+		return nil, fmt.Errorf("can't parse manifest: %w", err)
+	}
+
+	resultData := &extensionData{}
+
+	if manifest.Applications.Gecko.ID != "" {
+		resultData.appID = manifest.Applications.Gecko.ID
+	} else if manifest.BrowserSpecificSettings.Gecko.ID != "" {
+		resultData.appID = manifest.BrowserSpecificSettings.Gecko.ID
+	} else {
+		return nil, fmt.Errorf("can't get appID from manifest: %q", zipFilepath)
+	}
+
+	if manifest.Version == "" {
+		return nil, fmt.Errorf("can't get version from manifest: %q", zipFilepath)
+	}
+
+	return resultData, nil
 }
 
 // Status returns status of the extension by appID.
@@ -155,18 +195,18 @@ func (s *Store) Status(appID string) (result []byte, err error) {
 	return body, nil
 }
 
-type version struct {
+type responseVersion struct {
 	ID      int    `json:"id"`
 	Version string `json:"version"`
 }
 
 type versionResponse struct {
-	PageSize  int         `json:"page_size"`
-	PageCount int         `json:"page_count"`
-	Count     int         `json:"count"`
-	Next      interface{} `json:"next"`
-	Previous  interface{} `json:"previous"`
-	Results   []version   `json:"results"`
+	PageSize  int               `json:"page_size"`
+	PageCount int               `json:"page_count"`
+	Count     int               `json:"count"`
+	Next      any               `json:"next"`
+	Previous  any               `json:"previous"`
+	Results   []responseVersion `json:"results"`
 }
 
 // VersionID retrieves version ID by version number.
@@ -521,13 +561,13 @@ func (s *Store) Insert(filepath, sourcepath string) (err error) {
 		return fmt.Errorf("[Insert] wasn't able to upload new extension due to: %w", err)
 	}
 
-	manifest, err := parseManifest(filepath)
+	extData, err := extDataFromFile(filepath)
 	if err != nil {
 		return fmt.Errorf("[Insert] wasn't able to parse manifest: %q due to: %w", filepath, err)
 	}
 
-	appID := manifest.Applications.Gecko.ID
-	version := manifest.Version
+	appID := extData.appID
+	version := extData.version
 
 	err = s.AwaitValidation(appID, version)
 	if err != nil {
@@ -621,13 +661,13 @@ func (s *Store) UploadUpdate(appID, version, filePath string) (result []byte, er
 func (s *Store) Update(filepath, sourcepath string) (err error) {
 	log.Debug("start uploading update for extension: %s, with source: %s", filepath, sourcepath)
 
-	manifest, err := parseManifest(filepath)
+	extData, err := extDataFromFile(filepath)
 	if err != nil {
-		return fmt.Errorf("[Update] wasn't able to parse manifest: %q due to: %w", filepath, err)
+		return fmt.Errorf("getting extension data: %q due to: %w", filepath, err)
 	}
 
-	appID := manifest.Applications.Gecko.ID
-	version := manifest.Version
+	appID := extData.appID
+	version := extData.version
 
 	_, err = s.UploadUpdate(appID, version, filepath)
 	if err != nil {
@@ -754,13 +794,13 @@ func (s *Store) DownloadSigned(appID, version string) (err error) {
 func (s *Store) Sign(filepath string) (err error) {
 	log.Debug("start signing extension: %q", filepath)
 
-	manifest, err := parseManifest(filepath)
+	extData, err := extDataFromFile(filepath)
 	if err != nil {
-		return fmt.Errorf("[Sign] wasn't able to parse manifest: %q, due to: %w", filepath, err)
+		return fmt.Errorf("getting extension data: %q, due to: %w", filepath, err)
 	}
 
-	appID := manifest.Applications.Gecko.ID
-	version := manifest.Version
+	appID := extData.appID
+	version := extData.version
 
 	_, err = s.UploadUpdate(appID, version, filepath)
 	if err != nil {

@@ -1,6 +1,7 @@
 package edge_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -123,7 +124,10 @@ func TestUploadUpdate(t *testing.T) {
 		URL:    storeURL,
 	}
 
-	actualUpdateResponse, err := store.UploadUpdate(appID, "./testdata/test.txt")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	actualUpdateResponse, err := store.UploadUpdate(ctx, appID, "./testdata/test.txt")
 	require.NoError(t, err)
 
 	assert.Equal(operationID, actualUpdateResponse)

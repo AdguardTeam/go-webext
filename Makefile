@@ -14,4 +14,4 @@ format:
 	gofumpt -w .
 
 test:
-	go test ./...
+	go test ./... -count=1
