@@ -153,6 +153,8 @@ func extDataFromFile(zipFilepath string) (*extensionData, error) {
 		return nil, fmt.Errorf("can't get version from manifest: %q", zipFilepath)
 	}
 
+	resultData.version = manifest.Version
+
 	return resultData, nil
 }
 
@@ -267,7 +269,7 @@ func (s *Store) VersionID(appID, version string) (result string, err error) {
 		return "", fmt.Errorf("version %s not found", version)
 	}
 
-	log.Debug("Version ID: %s", versionID)
+	log.Debug("version ID: %s", versionID)
 
 	return versionID, nil
 }
