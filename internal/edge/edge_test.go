@@ -81,56 +81,97 @@ func TestAuthorize(t *testing.T) {
 }
 
 func TestUploadUpdate(t *testing.T) {
-	assert := assert.New(t)
+	t.Run("uploads update", func(t *testing.T) {
+		assert := assert.New(t)
 
-	operationID := "test_operation_id"
+		operationID := "test_operation_id"
 
-	authServer := newAuthServer(t, accessToken)
-	defer authServer.Close()
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
 
-	accessTokenURL, err := url.Parse(authServer.URL)
-	require.NoError(t, err)
-
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
-
-	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPost, r.Method)
-		assert.Equal("Bearer "+accessToken, r.Header.Get("Authorization"))
-		assert.Equal("application/zip", r.Header.Get("Content-Type"))
-		assert.Equal(path.Join("/v1/products", appID, "submissions/draft/package"), r.URL.Path)
-
-		responseBody, err := io.ReadAll(r.Body)
+		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		assert.Equal("test_file_content", string(responseBody))
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
 
-		w.Header().Set("Location", operationID)
-		w.WriteHeader(http.StatusAccepted)
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(http.MethodPost, r.Method)
+			assert.Equal("Bearer "+accessToken, r.Header.Get("Authorization"))
+			assert.Equal("application/zip", r.Header.Get("Content-Type"))
+			assert.Equal(path.Join("/v1/products", appID, "submissions/draft/package"), r.URL.Path)
 
-		_, err = w.Write(nil)
+			responseBody, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+
+			assert.Equal("test_file_content", string(responseBody))
+
+			w.Header().Set("Location", operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err = w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
-	}))
-	defer storeServer.Close()
 
-	storeURL, err := url.Parse(storeServer.URL)
-	require.NoError(t, err)
+		store := edge.Store{
+			Client: &client,
+			URL:    storeURL,
+		}
 
-	store := edge.Store{
-		Client: &client,
-		URL:    storeURL,
-	}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+		actualUpdateResponse, err := store.UploadUpdate(ctx, appID, "./testdata/test.txt")
+		require.NoError(t, err)
 
-	actualUpdateResponse, err := store.UploadUpdate(ctx, appID, "./testdata/test.txt")
-	require.NoError(t, err)
+		assert.Equal(operationID, actualUpdateResponse)
+	})
+	t.Run("throws error on timeout", func(t *testing.T) {
+		assert := assert.New(t)
 
-	assert.Equal(operationID, actualUpdateResponse)
+		serverResponseDuration := 200 * time.Millisecond
+		contextTimeoutDuration := 100 * time.Millisecond
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(serverResponseDuration)
+			_, err = w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.Store{
+			Client: &client,
+			URL:    storeURL,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), contextTimeoutDuration)
+		defer cancel()
+
+		_, err = store.UploadUpdate(ctx, appID, "./testdata/test.txt")
+		assert.ErrorContains(err, "context deadline exceeded")
+	})
 }
 
 func TestUploadStatus(t *testing.T) {
