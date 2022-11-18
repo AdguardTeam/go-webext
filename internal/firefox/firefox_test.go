@@ -256,3 +256,60 @@ func TestVersionID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(strconv.Itoa(expectedVersionID), actualVersionID)
 }
+
+func TestUploadStatus(t *testing.T) {
+	assert := assert.New(t)
+
+	expectedStatus := firefox.UploadStatus{
+		GUID:             "test",
+		Active:           false,
+		AutomatedSigning: false,
+		Files:            nil,
+		PassedReview:     true,
+		Pk:               "",
+		Processed:        true,
+		Reviewed:         true,
+		URL:              "",
+		Valid:            false,
+		ValidationURL:    "",
+		Version:          "",
+	}
+
+	client := firefox.NewClient(firefox.ClientConfig{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return time.Now().Unix()
+		},
+	})
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(http.MethodGet, r.Method)
+
+		assert.Contains(r.URL.Path, "/api/v5/addons/"+appID+"/versions/"+version)
+
+		authHeader, err := client.GenAuthHeader()
+		require.NoError(t, err)
+		assert.Equal(r.Header.Get("Authorization"), authHeader)
+
+		w.WriteHeader(http.StatusOK)
+
+		response, err := json.Marshal(expectedStatus)
+		_, err = w.Write(response)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := firefox.Store{
+		Client: &client,
+		URL:    storeURL,
+	}
+
+	actualStatus, err := store.UploadStatus(appID, version)
+	require.NoError(t, err)
+
+	assert.Equal(expectedStatus, *actualStatus)
+}
