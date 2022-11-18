@@ -197,18 +197,20 @@ func (s *Store) Status(appID string) (result []byte, err error) {
 	return body, nil
 }
 
-type responseVersion struct {
+// ResultVersion describes response version structure.
+type ResultVersion struct {
 	ID      int    `json:"id"`
 	Version string `json:"version"`
 }
 
-type versionResponse struct {
-	PageSize  int               `json:"page_size"`
-	PageCount int               `json:"page_count"`
-	Count     int               `json:"count"`
-	Next      any               `json:"next"`
-	Previous  any               `json:"previous"`
-	Results   []responseVersion `json:"results"`
+// VersionResponse describes response from the store api.
+type VersionResponse struct {
+	PageSize  int             `json:"page_size"`
+	PageCount int             `json:"page_count"`
+	Count     int             `json:"count"`
+	Next      any             `json:"next"`
+	Previous  any             `json:"previous"`
+	Results   []ResultVersion `json:"results"`
 }
 
 // VersionID retrieves version ID by version number.
@@ -249,7 +251,7 @@ func (s *Store) VersionID(appID, version string) (result string, err error) {
 		return "", fmt.Errorf("got code %d, body: %q", res.StatusCode, body)
 	}
 
-	var versions versionResponse
+	var versions VersionResponse
 
 	err = json.Unmarshal(body, &versions)
 	if err != nil {

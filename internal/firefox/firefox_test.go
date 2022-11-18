@@ -1,11 +1,13 @@
 package firefox_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 
@@ -191,4 +193,66 @@ func TestUploadSource(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(response, string(uploadResponse))
+}
+
+func TestVersionID(t *testing.T) {
+	assert := assert.New(t)
+	expectedVersionID := 100
+
+	client := firefox.NewClient(firefox.ClientConfig{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return time.Now().Unix()
+		},
+	})
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(http.MethodGet, r.Method)
+
+		assert.Contains(r.URL.Path, "/api/v5/addons/addon/"+appID+"/versions")
+
+		query, err := url.ParseQuery(r.URL.RawQuery)
+		require.NoError(t, err)
+		assert.Equal(query.Get("filter"), "all_with_unlisted")
+
+		authHeader, err := client.GenAuthHeader()
+		require.NoError(t, err)
+		assert.Equal(r.Header.Get("Authorization"), authHeader)
+
+		w.WriteHeader(http.StatusOK)
+
+		resultVersion := firefox.ResultVersion{
+			ID:      expectedVersionID,
+			Version: version,
+		}
+		var results []firefox.ResultVersion
+		results = append(results, resultVersion)
+
+		versionResponse := firefox.VersionResponse{
+			PageSize:  0,
+			PageCount: 0,
+			Count:     0,
+			Next:      nil,
+			Previous:  nil,
+			Results:   results,
+		}
+
+		versionResponseBytes, err := json.Marshal(versionResponse)
+		require.NoError(t, err)
+		_, err = w.Write(versionResponseBytes)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := firefox.Store{
+		Client: &client,
+		URL:    storeURL,
+	}
+
+	actualVersionID, err := store.VersionID(appID, version)
+	require.NoError(t, err)
+	assert.Equal(strconv.Itoa(expectedVersionID), actualVersionID)
 }
