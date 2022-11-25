@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"time"
@@ -425,6 +424,6 @@ func Main() { //nolint:gocyclo
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatalf("error occurred: %s", err)
+		fmt.Printf("error occurred: %s", err)
 	}
 }
