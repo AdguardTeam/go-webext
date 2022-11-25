@@ -279,7 +279,7 @@ func TestUploadStatus(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		assert.Contains(t, r.URL.Path, "/api/v5/addons/"+appID+"/versions/"+version)
+		assert.Contains(t, r.URL.Path, path.Join("/api/v5/addons/", appID, "/versions/", version))
 
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
