@@ -38,15 +38,13 @@ func createAuthServer(t *testing.T, accessToken string) *httptest.Server {
 }
 
 func TestAuthorize(t *testing.T) {
-	assert := assert.New(t)
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPost, r.Method)
-		assert.Equal(clientID, r.FormValue("client_id"))
-		assert.Equal(clientSecret, r.FormValue("client_secret"))
-		assert.Equal(refreshToken, r.FormValue("refresh_token"))
-		assert.Equal("refresh_token", r.FormValue("grant_type"))
-		assert.Equal("urn:ietf:wg:oauth:2.0:oob", r.FormValue("redirect_uri"))
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, clientID, r.FormValue("client_id"))
+		assert.Equal(t, clientSecret, r.FormValue("client_secret"))
+		assert.Equal(t, refreshToken, r.FormValue("refresh_token"))
+		assert.Equal(t, "refresh_token", r.FormValue("grant_type"))
+		assert.Equal(t, "urn:ietf:wg:oauth:2.0:oob", r.FormValue("redirect_uri"))
 
 		expectedJSON, err := json.Marshal(map[string]string{
 			"access_token": accessToken,
@@ -68,15 +66,13 @@ func TestAuthorize(t *testing.T) {
 
 	result, err := client.Authorize()
 	if err != nil {
-		assert.NoError(err, "Should be no errors")
+		assert.NoError(t, err, "Should be no errors")
 	}
 
-	assert.Equal(accessToken, result, "Tokens should be equal")
+	assert.Equal(t, accessToken, result, "Tokens should be equal")
 }
 
 func TestStatus(t *testing.T) {
-	assert := assert.New(t)
-
 	status := chrome.StatusResponse{
 		Kind:        "test kind",
 		ID:          appID,
@@ -96,10 +92,10 @@ func TestStatus(t *testing.T) {
 	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(r.Method, http.MethodGet)
-		assert.Contains(r.URL.Path, "chromewebstore/v1.1/items/"+appID)
-		assert.Equal(r.URL.Query().Get("projection"), "DRAFT")
-		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Method, http.MethodGet)
+		assert.Contains(t, r.URL.Path, "chromewebstore/v1.1/items/"+appID)
+		assert.Equal(t, r.URL.Query().Get("projection"), "DRAFT")
+		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
 
 		expectedJSON, err := json.Marshal(map[string]string{
 			"kind":        status.Kind,
@@ -130,12 +126,10 @@ func TestStatus(t *testing.T) {
 	err = json.Unmarshal(actualStatusBytes, &actualStatus)
 	require.NoError(t, err)
 
-	assert.Equal(status, actualStatus)
+	assert.Equal(t, status, actualStatus)
 }
 
 func TestInsert(t *testing.T) {
-	assert := assert.New(t)
-
 	insertResponse := chrome.ItemResource{
 		Kind:        "chromewebstore#item",
 		ID:          "lcfmdcpihnaincdpgibhlncnekofobkc",
@@ -153,14 +147,14 @@ func TestInsert(t *testing.T) {
 	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPost, r.Method)
-		assert.Contains(r.URL.Path, "upload/chromewebstore/v1.1/items")
-		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "upload/chromewebstore/v1.1/items")
+		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
-		assert.Equal("test file", string(body))
+		assert.Equal(t, "test file", string(body))
 
 		expectedJSON, err := json.Marshal(insertResponse)
 		require.NoError(t, err)
@@ -181,12 +175,10 @@ func TestInsert(t *testing.T) {
 	result, err := store.Insert("./testdata/test.txt")
 	require.NoError(t, err)
 
-	assert.Equal(insertResponse, *result)
+	assert.Equal(t, insertResponse, *result)
 }
 
 func TestUpdate(t *testing.T) {
-	assert := assert.New(t)
-
 	updateResponse := chrome.ItemResource{
 		Kind:        "test kind",
 		ID:          appID,
@@ -204,14 +196,14 @@ func TestUpdate(t *testing.T) {
 	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPut, r.Method)
-		assert.Contains(r.URL.Path, "upload/chromewebstore/v1.1/items/"+appID)
-		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Contains(t, r.URL.Path, "upload/chromewebstore/v1.1/items/"+appID)
+		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
-		assert.Equal("test file", string(body))
+		assert.Equal(t, "test file", string(body))
 
 		expectedJSON, err := json.Marshal(updateResponse)
 		require.NoError(t, err)
@@ -231,12 +223,10 @@ func TestUpdate(t *testing.T) {
 
 	result, err := store.Update(appID, "testdata/test.txt")
 	require.NoError(t, err)
-	assert.Equal(updateResponse, *result)
+	assert.Equal(t, updateResponse, *result)
 }
 
 func TestPublish(t *testing.T) {
-	assert := assert.New(t)
-
 	publishResponse := chrome.PublishResponse{
 		Kind:         "test_kind",
 		ItemID:       appID,
@@ -255,10 +245,10 @@ func TestPublish(t *testing.T) {
 	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPost, r.Method)
-		assert.Contains(r.URL.Path, "chromewebstore/v1.1/items/"+appID+"/publish")
-		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
-		assert.Equal(r.Header.Get("Content-Length"), "0")
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "chromewebstore/v1.1/items/"+appID+"/publish")
+		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get("Content-Length"), "0")
 
 		expectedJSON, err := json.Marshal(publishResponse)
 		require.NoError(t, err)
@@ -278,5 +268,5 @@ func TestPublish(t *testing.T) {
 
 	result, err := store.Publish(appID)
 	require.NoError(t, err)
-	assert.Equal(publishResponse, *result)
+	assert.Equal(t, publishResponse, *result)
 }
