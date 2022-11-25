@@ -129,6 +129,7 @@ func TestUploadUpdate(t *testing.T) {
 
 		assert.Equal(t, operationID, actualUpdateResponse)
 	})
+
 	t.Run("throws error on timeout", func(t *testing.T) {
 		serverResponseDuration := 200 * time.Millisecond
 		contextTimeoutDuration := 100 * time.Millisecond

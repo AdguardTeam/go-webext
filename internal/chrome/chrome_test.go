@@ -223,6 +223,7 @@ func TestUpdate(t *testing.T) {
 
 	result, err := store.Update(appID, "testdata/test.txt")
 	require.NoError(t, err)
+
 	assert.Equal(t, updateResponse, *result)
 }
 
@@ -268,5 +269,6 @@ func TestPublish(t *testing.T) {
 
 	result, err := store.Publish(appID)
 	require.NoError(t, err)
+
 	assert.Equal(t, publishResponse, *result)
 }

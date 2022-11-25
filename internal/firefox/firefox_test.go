@@ -205,10 +205,12 @@ func TestVersionID(t *testing.T) {
 
 		query, err := url.ParseQuery(r.URL.RawQuery)
 		require.NoError(t, err)
+
 		assert.Equal(t, query.Get("filter"), "all_with_unlisted")
 
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
+
 		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
 
 		w.WriteHeader(http.StatusOK)
@@ -231,6 +233,7 @@ func TestVersionID(t *testing.T) {
 
 		versionResponseBytes, err := json.Marshal(versionResponse)
 		require.NoError(t, err)
+
 		_, err = w.Write(versionResponseBytes)
 		require.NoError(t, err)
 	}))
@@ -245,6 +248,7 @@ func TestVersionID(t *testing.T) {
 
 	actualVersionID, err := store.VersionID(appID, version)
 	require.NoError(t, err)
+
 	assert.Equal(t, strconv.Itoa(expectedVersionID), actualVersionID)
 }
 
@@ -279,6 +283,7 @@ func TestUploadStatus(t *testing.T) {
 
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
+
 		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
 
 		w.WriteHeader(http.StatusOK)
