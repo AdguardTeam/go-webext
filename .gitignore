@@ -1,3 +1,4 @@
 /go-webext
 .env
 tmp
+coverage.html

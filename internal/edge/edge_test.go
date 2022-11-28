@@ -44,15 +44,13 @@ const (
 )
 
 func TestAuthorize(t *testing.T) {
-	assert := assert.New(t)
-
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		assert.Equal(req.Method, http.MethodPost)
-		assert.Equal(req.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
-		assert.Equal(req.FormValue("client_id"), clientID)
-		assert.Equal(req.FormValue("scope"), "https://api.addons.microsoftedge.microsoft.com/.default")
-		assert.Equal(req.FormValue("client_secret"), clientSecret)
-		assert.Equal(req.FormValue("grant_type"), "client_credentials")
+		assert.Equal(t, req.Method, http.MethodPost)
+		assert.Equal(t, req.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
+		assert.Equal(t, req.FormValue("client_id"), clientID)
+		assert.Equal(t, req.FormValue("scope"), "https://api.addons.microsoftedge.microsoft.com/.default")
+		assert.Equal(t, req.FormValue("client_secret"), clientSecret)
+		assert.Equal(t, req.FormValue("grant_type"), "client_credentials")
 
 		response, err := json.Marshal(edge.AuthorizeResponse{
 			TokenType:   "",
@@ -77,65 +75,101 @@ func TestAuthorize(t *testing.T) {
 	actualAccessToken, err := client.Authorize()
 	require.NoError(t, err)
 
-	assert.Equal(accessToken, actualAccessToken)
+	assert.Equal(t, accessToken, actualAccessToken)
 }
 
 func TestUploadUpdate(t *testing.T) {
-	assert := assert.New(t)
+	t.Run("uploads update", func(t *testing.T) {
+		operationID := "test_operation_id"
 
-	operationID := "test_operation_id"
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
 
-	authServer := newAuthServer(t, accessToken)
-	defer authServer.Close()
-
-	accessTokenURL, err := url.Parse(authServer.URL)
-	require.NoError(t, err)
-
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
-
-	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPost, r.Method)
-		assert.Equal("Bearer "+accessToken, r.Header.Get("Authorization"))
-		assert.Equal("application/zip", r.Header.Get("Content-Type"))
-		assert.Equal(path.Join("/v1/products", appID, "submissions/draft/package"), r.URL.Path)
-
-		responseBody, err := io.ReadAll(r.Body)
+		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		assert.Equal("test_file_content", string(responseBody))
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
 
-		w.Header().Set("Location", operationID)
-		w.WriteHeader(http.StatusAccepted)
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.Equal(t, "Bearer "+accessToken, r.Header.Get("Authorization"))
+			assert.Equal(t, "application/zip", r.Header.Get("Content-Type"))
+			assert.Equal(t, path.Join("/v1/products", appID, "submissions/draft/package"), r.URL.Path)
 
-		_, err = w.Write(nil)
+			responseBody, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test_file_content", string(responseBody))
+
+			w.Header().Set("Location", operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err = w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
-	}))
-	defer storeServer.Close()
 
-	storeURL, err := url.Parse(storeServer.URL)
-	require.NoError(t, err)
+		store := edge.Store{
+			Client: &client,
+			URL:    storeURL,
+		}
 
-	store := edge.Store{
-		Client: &client,
-		URL:    storeURL,
-	}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+		actualUpdateResponse, err := store.UploadUpdate(ctx, appID, "./testdata/test.txt")
+		require.NoError(t, err)
 
-	actualUpdateResponse, err := store.UploadUpdate(ctx, appID, "./testdata/test.txt")
-	require.NoError(t, err)
+		assert.Equal(t, operationID, actualUpdateResponse)
+	})
 
-	assert.Equal(operationID, actualUpdateResponse)
+	t.Run("throws error on timeout", func(t *testing.T) {
+		serverResponseDuration := 200 * time.Millisecond
+		contextTimeoutDuration := 100 * time.Millisecond
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		client := edge.Client{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			AccessTokenURL: accessTokenURL,
+		}
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(serverResponseDuration)
+			_, err = w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.Store{
+			Client: &client,
+			URL:    storeURL,
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), contextTimeoutDuration)
+		defer cancel()
+
+		_, err = store.UploadUpdate(ctx, appID, "./testdata/test.txt")
+		assert.ErrorContains(t, err, "context deadline exceeded")
+	})
 }
 
 func TestUploadStatus(t *testing.T) {
-	assert := assert.New(t)
-
 	response := edge.UploadStatusResponse{
 		ID:              "{operationID}",
 		CreatedTime:     "Date Time",
@@ -159,8 +193,8 @@ func TestUploadStatus(t *testing.T) {
 	}
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(r.Header.Get("Authorization"), "Bearer "+accessToken)
-		assert.Equal(r.URL.Path, "/v1/products/"+appID+"/submissions/draft/package/operations/"+operationID)
+		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.URL.Path, "/v1/products/"+appID+"/submissions/draft/package/operations/"+operationID)
 
 		response, err := json.Marshal(response)
 		require.NoError(t, err)
@@ -181,7 +215,7 @@ func TestUploadStatus(t *testing.T) {
 	uploadStatus, err := store.UploadStatus(appID, operationID)
 	require.NoError(t, err)
 
-	assert.Equal(response, *uploadStatus)
+	assert.Equal(t, response, *uploadStatus)
 }
 
 func TestUpdate(t *testing.T) {

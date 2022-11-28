@@ -1,11 +1,13 @@
 package firefox_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 
@@ -25,8 +27,6 @@ const (
 )
 
 func TestStatus(t *testing.T) {
-	assert := assert.New(t)
-
 	now := func() int64 {
 		return 1
 	}
@@ -34,12 +34,12 @@ func TestStatus(t *testing.T) {
 	client := firefox.NewClient(firefox.ClientConfig{ClientID: clientID, ClientSecret: clientSecret, Now: now})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(r.Method, http.MethodGet)
-		assert.Contains(r.URL.Path, appID)
+		assert.Equal(t, r.Method, http.MethodGet)
+		assert.Contains(t, r.URL.Path, appID)
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
 
-		assert.Equal(r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
 
 		_, err = w.Write([]byte(status))
 		require.NoError(t, err)
@@ -58,12 +58,10 @@ func TestStatus(t *testing.T) {
 
 	require.NoError(t, err)
 
-	assert.Equal(status, string(actualStatus))
+	assert.Equal(t, status, string(actualStatus))
 }
 
 func TestUploadNew(t *testing.T) {
-	assert := assert.New(t)
-
 	currentTimeSec := time.Now().Unix()
 	now := func() int64 {
 		return currentTimeSec
@@ -72,12 +70,12 @@ func TestUploadNew(t *testing.T) {
 	client := firefox.NewClient(firefox.ClientConfig{ClientID: clientID, ClientSecret: clientSecret, Now: now})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(r.Method, http.MethodPost)
+		assert.Equal(t, r.Method, http.MethodPost)
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
 
-		assert.Equal(r.Header.Get("Authorization"), authHeader)
-		assert.Contains(r.URL.Path, "/api/v5/addons")
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Contains(t, r.URL.Path, "/api/v5/addons")
 		file, _, err := r.FormFile("upload")
 		require.NoError(t, err)
 		defer func() { err = errors.WithDeferred(err, file.Close()) }()
@@ -85,7 +83,7 @@ func TestUploadNew(t *testing.T) {
 		body, err := io.ReadAll(file)
 		require.NoError(t, err)
 
-		assert.Contains(string(body), "test content")
+		assert.Contains(t, string(body), "test content")
 
 		w.WriteHeader(http.StatusCreated)
 		_, err = w.Write([]byte(status))
@@ -104,12 +102,10 @@ func TestUploadNew(t *testing.T) {
 	result, err := store.UploadNew("testdata/test.txt")
 	require.NoError(t, err)
 
-	assert.Equal(status, string(result))
+	assert.Equal(t, status, string(result))
 }
 
 func TestUploadUpdate(t *testing.T) {
-	assert := assert.New(t)
-
 	currentTimeSec := time.Now().Unix()
 	now := func() int64 {
 		return currentTimeSec
@@ -118,17 +114,17 @@ func TestUploadUpdate(t *testing.T) {
 	client := firefox.NewClient(firefox.ClientConfig{ClientID: clientID, ClientSecret: clientSecret, Now: now})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPut, r.Method)
-		assert.Contains(r.URL.Path, path.Join("api/v5/addons", appID, "versions", version))
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Contains(t, r.URL.Path, path.Join("api/v5/addons", appID, "versions", version))
 		authHeader, err := client.GenAuthHeader()
 		require.NoError(t, err)
 
-		assert.Equal(r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
 		file, header, err := r.FormFile("upload")
 		require.NoError(t, err)
 		defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
-		assert.Equal(header.Filename, "extension.zip")
+		assert.Equal(t, header.Filename, "extension.zip")
 
 		w.WriteHeader(http.StatusCreated)
 		_, err = w.Write([]byte(response))
@@ -147,12 +143,10 @@ func TestUploadUpdate(t *testing.T) {
 	actualResponse, err := store.UploadUpdate(appID, version, "testdata/extension.zip")
 	require.NoError(t, err)
 
-	assert.Equal(response, string(actualResponse))
+	assert.Equal(t, response, string(actualResponse))
 }
 
 func TestUploadSource(t *testing.T) {
-	assert := assert.New(t)
-
 	testFile := "testdata/source.zip"
 	versionID := "test_version_id"
 
@@ -165,15 +159,15 @@ func TestUploadSource(t *testing.T) {
 	})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(http.MethodPatch, r.Method)
-		assert.Contains(r.URL.Path, "/api/v5/addons/addon/"+appID+"/versions/"+versionID+"/")
-		assert.Contains(r.Header.Get("Content-Type"), "multipart/form-data")
+		assert.Equal(t, http.MethodPatch, r.Method)
+		assert.Contains(t, r.URL.Path, "/api/v5/addons/addon/"+appID+"/versions/"+versionID+"/")
+		assert.Contains(t, r.Header.Get("Content-Type"), "multipart/form-data")
 
 		file, header, err := r.FormFile("source")
 		require.NoError(t, err)
 		defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
-		assert.Equal(header.Filename, "source.zip")
+		assert.Equal(t, header.Filename, "source.zip")
 		_, err = w.Write([]byte(response))
 		require.NoError(t, err)
 	}))
@@ -190,5 +184,126 @@ func TestUploadSource(t *testing.T) {
 	uploadResponse, err := store.UploadSource(appID, versionID, testFile)
 	require.NoError(t, err)
 
-	assert.Equal(response, string(uploadResponse))
+	assert.Equal(t, response, string(uploadResponse))
+}
+
+func TestVersionID(t *testing.T) {
+	expectedVersionID := 100
+
+	client := firefox.NewClient(firefox.ClientConfig{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return time.Now().Unix()
+		},
+	})
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		assert.Contains(t, r.URL.Path, "/api/v5/addons/addon/"+appID+"/versions")
+
+		query, err := url.ParseQuery(r.URL.RawQuery)
+		require.NoError(t, err)
+
+		assert.Equal(t, query.Get("filter"), "all_with_unlisted")
+
+		authHeader, err := client.GenAuthHeader()
+		require.NoError(t, err)
+
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+
+		w.WriteHeader(http.StatusOK)
+
+		resultVersion := firefox.ResultVersion{
+			ID:      expectedVersionID,
+			Version: version,
+		}
+		var results []firefox.ResultVersion
+		results = append(results, resultVersion)
+
+		versionResponse := firefox.VersionResponse{
+			PageSize:  0,
+			PageCount: 0,
+			Count:     0,
+			Next:      nil,
+			Previous:  nil,
+			Results:   results,
+		}
+
+		versionResponseBytes, err := json.Marshal(versionResponse)
+		require.NoError(t, err)
+
+		_, err = w.Write(versionResponseBytes)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := firefox.Store{
+		Client: &client,
+		URL:    storeURL,
+	}
+
+	actualVersionID, err := store.VersionID(appID, version)
+	require.NoError(t, err)
+
+	assert.Equal(t, strconv.Itoa(expectedVersionID), actualVersionID)
+}
+
+func TestUploadStatus(t *testing.T) {
+	expectedStatus := firefox.UploadStatus{
+		GUID:             "test",
+		Active:           false,
+		AutomatedSigning: false,
+		Files:            nil,
+		PassedReview:     true,
+		Pk:               "",
+		Processed:        true,
+		Reviewed:         true,
+		URL:              "",
+		Valid:            false,
+		ValidationURL:    "",
+		Version:          "",
+	}
+
+	client := firefox.NewClient(firefox.ClientConfig{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return time.Now().Unix()
+		},
+	})
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		assert.Contains(t, r.URL.Path, path.Join("/api/v5/addons/", appID, "/versions/", version))
+
+		authHeader, err := client.GenAuthHeader()
+		require.NoError(t, err)
+
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+
+		w.WriteHeader(http.StatusOK)
+
+		response, err := json.Marshal(expectedStatus)
+		_, err = w.Write(response)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := firefox.Store{
+		Client: &client,
+		URL:    storeURL,
+	}
+
+	actualStatus, err := store.UploadStatus(appID, version)
+	require.NoError(t, err)
+
+	assert.Equal(t, expectedStatus, *actualStatus)
 }
