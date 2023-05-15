@@ -104,8 +104,13 @@ func AuthHeader(clientID, clientSecret string, currentTimeSec int64) (result str
 	return "JWT " + signedToken, nil
 }
 
-// AddonsBasePath is a base path for addons api.
-const AddonsBasePath = "api/v5/addons"
+// TODO update to v5 only - AG-22187
+
+// AddonsBasePathV4 is a base path for addons api v4.
+const AddonsBasePathV4 = "api/v4/addons"
+
+// AddonsBasePathV5 is a base path for addons api v5.
+const AddonsBasePathV5 = "api/v5/addons"
 
 // prepareRequest creates a new HTTP request object.  The function adds an
 // authorization header using the client's credentials.
@@ -166,7 +171,7 @@ type AmoStatusResponse struct {
 
 // Status returns status of the extension by appID.
 func (a *API) Status(appID string) (response *firefox.StatusResponse, err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePath, "addon", appID).String()
+	apiURL := a.URL.JoinPath(AddonsBasePathV4, "addon", appID).String()
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -208,7 +213,7 @@ func (a *API) Status(appID string) (response *firefox.StatusResponse, err error)
 //	curl "https://addons.mozilla.org/api/v5/addons/@my-addon/versions/1.0/" \
 //		-g -H "Authorization: JWT <jwt-token>"
 func (a *API) UploadStatus(appID, version string) (response *firefox.UploadStatus, err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePath, appID, "versions", version).String()
+	apiURL := a.URL.JoinPath(AddonsBasePathV4, appID, "versions", version).String()
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -243,7 +248,7 @@ func (a *API) UploadStatus(appID, version string) (response *firefox.UploadStatu
 // UploadSource uploads source code of the extension to the store.
 // Source can be uploaded only after the extension is validated.
 func (a *API) UploadSource(appID, versionID string, fileData io.Reader) (err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePath, "addon", appID, "versions", versionID, "/").String()
+	apiURL := a.URL.JoinPath(AddonsBasePathV5, "addon", appID, "versions", versionID, "/").String()
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -306,7 +311,7 @@ type VersionsResponse struct {
 func (a *API) VersionID(appID, version string) (response string, err error) {
 	queryString := url.Values{}
 	queryString.Add("filter", "all_with_unlisted")
-	apiURL := a.URL.JoinPath(AddonsBasePath, "addon", appID, "versions").String() + "?" + queryString.Encode()
+	apiURL := a.URL.JoinPath(AddonsBasePathV4, "addon", appID, "versions").String() + "?" + queryString.Encode()
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -362,7 +367,7 @@ func (a *API) VersionID(appID, version string) (response string, err error) {
 // [docs]: https://addons-server.readthedocs.io/en/latest/topics/api/signing.html?highlight=%2Faddons%2F#post--api-v5-addons-
 func (a *API) UploadNew(fileData io.Reader) (err error) {
 	// trailing slash is required for this request
-	apiURL := a.URL.JoinPath(AddonsBasePath, "/").String()
+	apiURL := a.URL.JoinPath(AddonsBasePathV4, "/").String()
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -409,7 +414,7 @@ func (a *API) UploadNew(fileData io.Reader) (err error) {
 // UploadUpdate uploads the extension update.
 func (a *API) UploadUpdate(appID, version string, fileData io.Reader) (err error) {
 	// A trailing slash is required for this request.
-	apiURL := a.URL.JoinPath(AddonsBasePath, appID, "versions", version, "/").String()
+	apiURL := a.URL.JoinPath(AddonsBasePathV4, appID, "versions", version, "/").String()
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)

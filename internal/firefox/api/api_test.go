@@ -44,7 +44,7 @@ func TestStatus(t *testing.T) {
 
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, "addon", appID))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV4, "addon", appID))
 
 		// assert that has auth header
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
@@ -105,7 +105,7 @@ func TestUploadStatus(t *testing.T) {
 		pt := testutil.PanicT{}
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, appID, "versions", version))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV4, appID, "versions", version))
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
@@ -145,7 +145,7 @@ func TestUploadSource(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pt := testutil.PanicT{}
 		assert.Equal(t, http.MethodPatch, r.Method)
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, "addon", appID, "versions", versionID, "/"))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV5, "addon", appID, "versions", versionID, "/"))
 		assert.Contains(t, r.Header.Get("Content-Type"), "multipart/form-data")
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
@@ -202,7 +202,7 @@ func TestVersionID(t *testing.T) {
 		pt := testutil.PanicT{}
 		assert.Equal(t, http.MethodGet, r.Method)
 
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, "addon", appID, "versions"))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV4, "addon", appID, "versions"))
 		query, err := url.ParseQuery(r.URL.RawQuery)
 		require.NoError(pt, err)
 
@@ -246,7 +246,7 @@ func TestUploadNew(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 
 		// trailing slash is required for this request
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, "/"))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV4, "/"))
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
@@ -292,7 +292,7 @@ func TestUploadUpdate(t *testing.T) {
 		assert.Equal(t, http.MethodPut, r.Method)
 
 		// A trailing slash is required for this request.
-		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePath, appID, "versions", version, "/"))
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV4, appID, "versions", version, "/"))
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
