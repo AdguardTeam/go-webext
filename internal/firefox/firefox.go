@@ -16,6 +16,7 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/adguardteam/go-webext/internal/fileutil"
+	"github.com/adguardteam/go-webext/internal/spinner"
 )
 
 // Store type describes store structure.
@@ -327,6 +328,9 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 	}
 	defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
+	spin := spinner.New()
+	spin.Start("uploading extension")
+
 	err = s.API.UploadNew(file)
 	if err != nil {
 		return fmt.Errorf("uploading new extension: %w", err)
@@ -340,11 +344,13 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 	appID := extData.appID
 	version := extData.version
 
+	spin.Message("awaiting validation")
 	err = s.awaitValidation(appID, version)
 	if err != nil {
 		return fmt.Errorf("validating extension: %s, version: %s, error: %w", appID, version, err)
 	}
 
+	spin.Message("getting version id")
 	versionID, err := s.API.VersionID(appID, version)
 	if err != nil {
 		return fmt.Errorf("getting version ID: %s, version: %s, error: %w", appID, version, err)
@@ -352,6 +358,7 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 
 	// TODO (maximtop): write tests for this case
 	if sourcepath != "" {
+		spin.Message("uploading source")
 		// TODO (maximtop): create throttler between requests, if requests are sent to fast, there is a chance that
 		//  the server will return 429 error. And test it properly. Make sure tests do not run too much time.
 		// wait 5 sec before uploading source code
@@ -361,6 +368,7 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 			return fmt.Errorf("uploading source: %s, version: %s, sourcepath: %s, error: %w", appID, version, sourcepath, err)
 		}
 	}
+	spin.Stop("extension uploaded")
 
 	log.Debug("successfully uploaded new extension: %q", filePath)
 
