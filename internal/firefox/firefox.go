@@ -474,11 +474,13 @@ func (s *Store) Sign(filepath, sourcepath string) (filename string, err error) {
 
 // Status returns status of the extension by appID.
 func (s *Store) Status(appID string) (result *StatusResponse, err error) {
+	log.Debug("getting status for extension: %s", appID)
 	response, err := s.API.Status(appID)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO (maximtop): make identical responses for all browsers
+	log.Debug("status response: %s", response)
 	return response, nil
 }

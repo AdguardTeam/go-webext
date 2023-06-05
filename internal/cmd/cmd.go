@@ -3,11 +3,11 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/AdguardTeam/golibs/log"
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/adguardteam/go-webext/internal/firefox"
@@ -48,12 +48,17 @@ func getChromeStore() (*chrome.Store, error) {
 }
 
 func getFirefoxStore() (*firefox.Store, error) {
+	const DefaultBaseURL = "addons.mozilla.org"
+
 	type config struct {
 		ClientID     string `env:"FIREFOX_CLIENT_ID,notEmpty"`
 		ClientSecret string `env:"FIREFOX_CLIENT_SECRET,notEmpty"`
+		BaseURL      string `env:"FIREFOX_BASE_URL"`
 	}
 
-	cfg := config{}
+	cfg := config{
+		BaseURL: DefaultBaseURL,
+	}
 	if err := env.Parse(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
 	}
@@ -63,7 +68,7 @@ func getFirefoxStore() (*firefox.Store, error) {
 		ClientSecret: cfg.ClientSecret,
 		URL: &url.URL{
 			Scheme: "https",
-			Host:   "addons.mozilla.org",
+			Host:   cfg.BaseURL,
 		},
 	})
 
@@ -318,6 +323,13 @@ func Main() {
 	app := &cli.App{
 		Name:  "webext",
 		Usage: "CLI app for managing extensions in the stores",
+		Before: func(ctx *cli.Context) error {
+			verbose := ctx.Bool("verbose")
+			if verbose {
+				log.SetLevel(log.DEBUG)
+			}
+			return nil
+		},
 	}
 
 	appFlag := &cli.StringFlag{Name: "app", Aliases: []string{"a"}, Required: true}
@@ -329,6 +341,14 @@ func Main() {
 		Usage:       "timeout in seconds",
 		DefaultText: fmt.Sprintf("%ds", int(edge.DefaultUploadTimeout.Seconds())),
 	}
+	verboseFlag := &cli.BoolFlag{
+		Name:     "verbose",
+		Aliases:  []string{"v"},
+		Usage:    "increase verbosity",
+		Category: "Miscellaneous:",
+	}
+
+	app.Flags = []cli.Flag{verboseFlag}
 
 	app.Commands = []*cli.Command{{
 		Name:  "status",
