@@ -16,7 +16,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/adguardteam/go-webext/internal/fileutil"
-	"github.com/adguardteam/go-webext/internal/spinner"
 )
 
 // Store type describes store structure.
@@ -36,10 +35,32 @@ type browserSpecificSettings struct {
 	Gecko gecko `json:"gecko"`
 }
 
+// Channel represents channel type of extension either listed or unlisted.
+type Channel string
+
+const (
+	// ChannelUnlisted represents unlisted channel.
+	ChannelUnlisted Channel = "unlisted"
+	// ChannelListed represents listed channel.
+	ChannelListed Channel = "listed"
+)
+
+// NewChannel creates new channel from string.
+func NewChannel(channel string) (Channel, error) {
+	switch channel {
+	case "listed":
+		return ChannelListed, nil
+	case "unlisted":
+		return ChannelUnlisted, nil
+	default:
+		return "", fmt.Errorf("unknown channel: %q", channel)
+	}
+}
+
 // manifest describes required fields parsed from the manifest.
 // extensions might have either "applications" or "browser_specific_settings"
 type manifest struct {
-	Version                 string                  `json:"version"`
+	Version                 string                  `json:"Version"`
 	Applications            applications            `json:"applications"`
 	BrowserSpecificSettings browserSpecificSettings `json:"browser_specific_settings"`
 }
@@ -83,65 +104,13 @@ func extDataFromFile(zipFilepath string) (*extensionData, error) {
 	}
 
 	if manifest.Version == "" {
-		return nil, fmt.Errorf("can't get version from manifest: %q", zipFilepath)
+		return nil, fmt.Errorf("can't get Version from manifest: %q", zipFilepath)
 	}
 
 	resultData.version = manifest.Version
 
 	return resultData, nil
 }
-
-// UploadStatusFiles represents upload status files structure
-type UploadStatusFiles struct {
-	DownloadURL string `json:"download_url"`
-	Hash        string `json:"hash"`
-	Signed      bool   `json:"signed"`
-}
-
-// ReviewedStatus represents reviewed status structure
-type ReviewedStatus bool
-
-// UnmarshalJSON parses ReviewedStatus.
-// used because review status may be boolean or string
-func (w *ReviewedStatus) UnmarshalJSON(b []byte) error {
-	rawString := string(b)
-
-	stringVal, err := strconv.Unquote(rawString)
-	if err != nil {
-		stringVal = rawString
-	}
-
-	boolVal, err := strconv.ParseBool(stringVal)
-	if err == nil {
-		*w = ReviewedStatus(boolVal)
-		return nil
-	}
-	if len(stringVal) > 0 {
-		*w = true
-	} else {
-		*w = false
-	}
-
-	return nil
-}
-
-// UploadStatus represents upload status structure
-type UploadStatus struct {
-	GUID             string              `json:"guid"`
-	Active           bool                `json:"active"`
-	AutomatedSigning bool                `json:"automated_signing"`
-	Files            []UploadStatusFiles `json:"files"`
-	PassedReview     bool                `json:"passed_review"`
-	Pk               string              `json:"pk"`
-	Processed        bool                `json:"processed"`
-	Reviewed         ReviewedStatus      `json:"reviewed"`
-	URL              string              `json:"url"`
-	Valid            bool                `json:"valid"`
-	ValidationURL    string              `json:"validation_url"`
-	Version          string              `json:"version"`
-}
-
-// TODO (maximtop): consider returning the same response for the chrome store.
 
 // StatusResponse represents a generic response from the status request.
 type StatusResponse struct {
@@ -150,19 +119,134 @@ type StatusResponse struct {
 	CurrentVersion string
 }
 
-// API is an interface for the store client.
-type API interface {
-	UploadStatus(appID, version string) (*UploadStatus, error)
-	UploadSource(appID, versionID string, fileData io.Reader) error
-	VersionID(appID, version string) (string, error)
-	UploadNew(fileData io.Reader) error
-	UploadUpdate(appID, version string, fileData io.Reader) error
-	DownloadSignedByURL(url string) ([]byte, error)
-	Status(appID string) (*StatusResponse, error)
+// FileInfo represents file info structure.
+type FileInfo struct {
+	ID     int    `json:"id"`
+	Status string `json:"status"`
+	URL    string `json:"url"`
 }
 
-// awaitValidation awaits validation of the extension.
-func (s *Store) awaitValidation(appID, version string) (err error) {
+// CompatibilityInfo represents firefox compatibility info structure.
+type CompatibilityInfo struct {
+	Min string `json:"min"`
+	Max string `json:"max"`
+}
+
+// Compatibility represents compatibility info structure.
+type Compatibility struct {
+	Firefox CompatibilityInfo `json:"firefox"`
+}
+
+// VersionInfo describes response with Version structure.
+// Actually info structure is bigger, but we don't need it.
+// https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#get--api-v5-addons-addon-(int-addon_id|string-addon_slug|string-addon_guid)-versions-(int-id|string-version_number)-
+type VersionInfo struct {
+	ID                           int           `json:"id"`
+	ApprovalNotes                string        `json:"approval_notes"`
+	Channel                      string        `json:"channel"`
+	Compatibility                Compatibility `json:"compatibility"`
+	EditURL                      string        `json:"edit_url"`
+	File                         FileInfo      `json:"file"`
+	IsDisabled                   bool          `json:"is_disabled"`
+	IsStrictCompatibilityEnabled bool          `json:"is_strict_compatibility_enabled"`
+	License                      interface{}   `json:"license"`
+	ReleaseNotes                 interface{}   `json:"release_notes"`
+	Reviewed                     interface{}   `json:"reviewed"`
+	Source                       interface{}   `json:"source"`
+	Version                      string        `json:"version"`
+}
+
+// AddonInfo describes request body for addon creation.
+// Actually info structure is bigger, but we don't need it.
+// https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#get--api-v5-addons-addon-(int-id|string-slug|string-guid)-
+type AddonInfo struct {
+	ID      int `json:"id"`
+	Authors []struct {
+		ID         int         `json:"id"`
+		Name       string      `json:"name"`
+		URL        string      `json:"url"`
+		Username   string      `json:"username"`
+		PictureURL interface{} `json:"picture_url"`
+	} `json:"authors"`
+	AverageDailyUsers int `json:"average_daily_users"`
+	Categories        struct {
+	} `json:"categories"`
+	ContributionsURL  string       `json:"contributions_url"`
+	Created           time.Time    `json:"created"`
+	CurrentVersion    *VersionInfo `json:"current_version"`
+	DefaultLocale     string       `json:"default_locale"`
+	Description       interface{}  `json:"description"`
+	DeveloperComments interface{}  `json:"developer_comments"`
+	EditURL           string       `json:"edit_url"`
+	GUID              string       `json:"guid"`
+	HasEula           bool         `json:"has_eula"`
+	HasPrivacyPolicy  bool         `json:"has_privacy_policy"`
+	Homepage          interface{}  `json:"homepage"`
+	IconURL           string       `json:"icon_url"`
+	Icons             struct {
+		Field1 string `json:"32"`
+		Field2 string `json:"64"`
+		Field3 string `json:"128"`
+	} `json:"icons"`
+	IsDisabled     bool      `json:"is_disabled"`
+	IsExperimental bool      `json:"is_experimental"`
+	LastUpdated    time.Time `json:"last_updated"`
+	Name           struct {
+		EnUS string `json:"en-US"`
+	} `json:"name"`
+	Previews []interface{} `json:"previews"`
+	Promoted interface{}   `json:"promoted"`
+	Ratings  struct {
+		Average         float64 `json:"average"`
+		BayesianAverage float64 `json:"bayesian_average"`
+		Count           int     `json:"count"`
+		TextCount       int     `json:"text_count"`
+	} `json:"ratings"`
+	RatingsURL      string `json:"ratings_url"`
+	RequiresPayment bool   `json:"requires_payment"`
+	ReviewURL       string `json:"review_url"`
+	Slug            string `json:"slug"`
+	Status          string `json:"status"`
+	Summary         struct {
+		EnUS string `json:"en-US"`
+	} `json:"summary"`
+	SupportEmail          interface{}   `json:"support_email"`
+	SupportURL            interface{}   `json:"support_url"`
+	Tags                  []interface{} `json:"tags"`
+	Type                  string        `json:"type"`
+	URL                   string        `json:"url"`
+	VersionsURL           string        `json:"versions_url"`
+	WeeklyDownloads       int           `json:"weekly_downloads"`
+	LatestUnlistedVersion *VersionInfo  `json:"latest_unlisted_version"`
+	Version               *VersionInfo  `json:"version"`
+}
+
+// UploadDetail is a status of the upload .
+type UploadDetail struct {
+	UUID       string      `json:"uuid"`
+	Channel    string      `json:"channel"`
+	Processed  bool        `json:"processed"`
+	Submitted  bool        `json:"submitted"`
+	URL        string      `json:"url"`
+	Valid      bool        `json:"valid"`
+	Validation interface{} `json:"validation"`
+	Version    string      `json:"Version"`
+}
+
+// API is an interface for the store client.
+type API interface {
+	DownloadSignedByURL(url string) ([]byte, error)
+	Status(appID string) (*StatusResponse, error)
+	CreateUpload(fileData io.Reader, c Channel) (*UploadDetail, error)
+	UploadDetail(UUID string) (*UploadDetail, error)
+	CreateVersion(appID, UUID string) (*VersionInfo, error)
+	VersionDetail(appID, versionID string) (versionInfo *VersionInfo, err error)
+	CreateAddon(UUID string) (*AddonInfo, error)
+	AttachSourceToVersion(appID, versionID string, sourceData io.Reader) (err error)
+}
+
+// awaitUploadValidation awaits validation of the upload.
+func (s *Store) awaitUploadValidation(UUID string) (err error) {
 	// TODO (maximtop): move constants to config
 	// with one 1 second timeout request may be throttled, so we use 5 seconds
 	const retryInterval = time.Second * 5
@@ -171,24 +255,24 @@ func (s *Store) awaitValidation(appID, version string) (err error) {
 	startTime := time.Now()
 
 	for {
-		if time.Since(startTime) > maxAwaitTime {
-			return fmt.Errorf("await validation timeout")
+		if elapsed := time.Since(startTime); elapsed > maxAwaitTime {
+			return fmt.Errorf("await validation timeout after %v, maximum allowed time is %v", elapsed, maxAwaitTime)
 		}
 
-		uploadStatus, err := s.API.UploadStatus(appID, version)
+		uploadDetail, err := s.API.UploadDetail(UUID)
 		if err != nil {
 			return fmt.Errorf("getting upload status: %w", err)
 		}
 
-		if uploadStatus.Processed {
-			if uploadStatus.Valid {
-				log.Debug("[awaitValidation] extension with id: %s, version: %s is valid", appID, version)
+		if uploadDetail.Processed {
+			if uploadDetail.Valid {
+				log.Debug("firefox: awaitUploadValidation: extension with uuid: %s is valid", UUID)
 			} else {
-				return fmt.Errorf("not valid, validation url: %s", uploadStatus.ValidationURL)
+				return fmt.Errorf("not valid, validation url: %s", uploadDetail.URL)
 			}
 			break
 		}
-		log.Debug("[awaitValidation] upload not processed yet, retrying in: %s", retryInterval)
+		log.Debug("firefox: awaitUploadValidation: upload not processed yet, retrying in: %s", retryInterval)
 		time.Sleep(retryInterval)
 	}
 
@@ -196,8 +280,8 @@ func (s *Store) awaitValidation(appID, version string) (err error) {
 }
 
 // awaitSigning waits for the extension to be signed.
-func (s *Store) awaitSigning(appID, version string) (err error) {
-	log.Debug("start waiting for signing of extension: %s", appID)
+func (s *Store) awaitVersionSigning(appID, versionID string) (err error) {
+	log.Debug("firefox: awaitVersionSigning: start waiting for signing of extension: %s, versionID: %s", appID, versionID)
 
 	// TODO (maximtop): move constants to config
 	// with one 1 second timeout request may be throttled, so we use 5 seconds
@@ -211,84 +295,33 @@ func (s *Store) awaitSigning(appID, version string) (err error) {
 			return fmt.Errorf("await signing timeout")
 		}
 
-		uploadStatus, err := s.API.UploadStatus(appID, version)
+		versionDetail, err := s.API.VersionDetail(appID, versionID)
 		if err != nil {
-			return fmt.Errorf("getting upload status for appID: %s, version: %s, due to: %w", appID, version, err)
+			return fmt.Errorf("getting upload status for appID: %s, versionID: %s, due to: %w", appID, versionID, err)
 		}
 
-		var signedAndReady bool
-		var requiresManualReview bool
-		if uploadStatus.Valid {
-			signedAndReady = uploadStatus.Active &&
-				bool(uploadStatus.Reviewed) &&
-				len(uploadStatus.Files) > 0
-			requiresManualReview = !uploadStatus.AutomatedSigning
-		}
-
-		if signedAndReady {
-			log.Debug("[awaitSigning] extension is signed and ready: %s", appID)
+		if versionDetail.File.Status == "public" {
+			log.Debug("firefox: awaitVersionSigning: extension is signed and ready: %s", appID)
 			return nil
-		} else if requiresManualReview {
-			return fmt.Errorf("extension won't be signed automatically, status: %+v", uploadStatus)
+		} else if versionDetail.File.Status == "disabled" {
+			return fmt.Errorf("extension won't be signed automatically, version detail: %+v", versionDetail)
 		} else {
-			log.Debug("[awaitSigning] extension is not processed yet, retry in %s", retryInterval)
+			log.Debug("firefox: awaitVersionSigning: extension is not signed yet, retry in %s", retryInterval)
 			time.Sleep(retryInterval)
 		}
 	}
 }
 
-// uploadSource uploads source code of the extension to the store.
-// Source can be uploaded only after the extension is validated.
-func (s *Store) uploadSource(appID, versionID, sourcePath string) (err error) {
-	log.Debug("uploading source for appID: %s, versionID: %s", appID, versionID)
-
-	file, err := os.Open(filepath.Clean(sourcePath))
-	if err != nil {
-		return fmt.Errorf("opening file %s, error: %w", sourcePath, err)
-	}
-	defer func() { err = errors.WithDeferred(err, file.Close()) }()
-
-	err = s.API.UploadSource(appID, versionID, file)
-	if err != nil {
-		return fmt.Errorf("uploading source for app id: %s, version id: %s, error: %w", appID, versionID, err)
-	}
-
-	log.Debug("successfully uploaded source")
-
-	return nil
-}
-
-// uploadUpdate uploads the extension update.
-func (s *Store) uploadUpdate(appID, version, filePath string) (err error) {
-	log.Debug("start uploading update for extension: %q", filePath)
-
-	file, err := os.Open(filepath.Clean(filePath))
-	if err != nil {
-		return fmt.Errorf("opening file: %q, due to: %w", filePath, err)
-	}
-	defer func() { err = errors.WithDeferred(err, file.Close()) }()
-
-	err = s.API.UploadUpdate(appID, version, file)
-
-	log.Debug("successfully uploaded update for extension: %q", filePath)
-
-	return nil
-}
-
 // downloadSigned downloads signed extension.
-func (s *Store) downloadSigned(appID, version string) (filename string, err error) {
+func (s *Store) downloadSigned(appID, versionID string) (filename string, err error) {
 	log.Debug("start downloading signed extension: %s", appID)
 
-	uploadStatus, err := s.API.UploadStatus(appID, version)
+	versionDetail, err := s.API.VersionDetail(appID, versionID)
 	if err != nil {
-		return "", fmt.Errorf("getting upload status: %s, version: %s, due to: %w", appID, version, err)
+		return "", fmt.Errorf("getting version detail for appID: %s, versionID: %s, due to: %w", appID, versionID, err)
 	}
 
-	if len(uploadStatus.Files) == 0 {
-		return "", fmt.Errorf("no files to download")
-	}
-
-	downloadURL := uploadStatus.Files[0].DownloadURL
+	downloadURL := versionDetail.File.URL
 
 	response, err := s.API.DownloadSignedByURL(downloadURL)
 	if err != nil {
@@ -318,6 +351,19 @@ func (s *Store) downloadSigned(appID, version string) (filename string, err erro
 	return filename, nil
 }
 
+// Status returns status of the extension by appID.
+func (s *Store) Status(appID string) (result *StatusResponse, err error) {
+	log.Debug("getting status for appID: %s", appID)
+	response, err := s.API.Status(appID)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO (maximtop): make identical responses for all browsers
+	log.Debug("status successfully received: %s", response)
+	return response, nil
+}
+
 // Insert uploads extension to the amo for the first time.
 func (s *Store) Insert(filePath, sourcepath string) (err error) {
 	log.Debug("start uploading new extension: %q, with source: %s", filePath, sourcepath)
@@ -328,159 +374,155 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 	}
 	defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
-	spin := spinner.New()
-	spin.Start("uploading extension")
-
-	err = s.API.UploadNew(file)
+	// we do not support uploading of the first extension to the listed channel
+	uploadDetail, err := s.API.CreateUpload(file, ChannelUnlisted)
 	if err != nil {
 		return fmt.Errorf("uploading new extension: %w", err)
 	}
 
-	extData, err := extDataFromFile(filePath)
+	// log upload details
+	log.Debug("upload details: %+v", uploadDetail)
+
+	err = s.awaitUploadValidation(uploadDetail.UUID)
 	if err != nil {
-		return fmt.Errorf("parsing manifest: %q, error: %w", filePath, err)
+		return fmt.Errorf("awaiting validation: %w", err)
 	}
 
-	appID := extData.appID
-	version := extData.version
-
-	spin.Message("awaiting validation")
-	err = s.awaitValidation(appID, version)
+	addonInfo, err := s.API.CreateAddon(uploadDetail.UUID)
 	if err != nil {
-		return fmt.Errorf("validating extension: %s, version: %s, error: %w", appID, version, err)
+		return fmt.Errorf("creating addon: %w", err)
 	}
 
-	spin.Message("getting version id")
-	versionID, err := s.API.VersionID(appID, version)
-	if err != nil {
-		return fmt.Errorf("getting version ID: %s, version: %s, error: %w", appID, version, err)
-	}
-
-	// TODO (maximtop): write tests for this case
+	// We can't append the source before the addon is created.
 	if sourcepath != "" {
-		spin.Message("uploading source")
-		// TODO (maximtop): create throttler between requests, if requests are sent to fast, there is a chance that
-		//  the server will return 429 error. And test it properly. Make sure tests do not run too much time.
-		// wait 5 sec before uploading source code
-		time.Sleep(5 * time.Second)
-		err = s.uploadSource(appID, versionID, sourcepath)
+		sourceReader, err := os.Open(filepath.Clean(sourcepath))
 		if err != nil {
-			return fmt.Errorf("uploading source: %s, version: %s, sourcepath: %s, error: %w", appID, version, sourcepath, err)
+			return fmt.Errorf("opening file: %q, due to: %w", sourcepath, err)
+		}
+		defer func() { err = errors.WithDeferred(err, sourceReader.Close()) }()
+
+		extData, err := extDataFromFile(filePath)
+		if err != nil {
+			return fmt.Errorf("parsing manifest: %q, error: %w", filePath, err)
+		}
+
+		err = s.API.AttachSourceToVersion(extData.appID, strconv.Itoa(addonInfo.Version.ID), sourceReader)
+		if err != nil {
+			return fmt.Errorf("uploading source: %w", err)
 		}
 	}
-	spin.Stop("extension uploaded")
-
-	log.Debug("successfully uploaded new extension: %q", filePath)
 
 	return nil
 }
 
-// Update uploads new version of extension to the store
-// Before uploading it reads manifest.json for getting extension version and uuid.
-func (s *Store) Update(filepath, sourcepath string) (err error) {
-	log.Debug("start uploading update for extension: %s, with source: %s", filepath, sourcepath)
+// Update uploads new Version of extension to the store
+// Before uploading it reads manifest.json for getting extension Version and uuid.
+func (s *Store) Update(extpath, sourcepath string, channel Channel) (err error) {
+	log.Debug("start uploading update for extension: %s, with source: %s", extpath, sourcepath)
 
-	extData, err := extDataFromFile(filepath)
+	cleanExtPath := filepath.Clean(extpath)
+	extData, err := extDataFromFile(cleanExtPath)
 	if err != nil {
-		return fmt.Errorf("getting extension data: %q due to: %w", filepath, err)
+		return fmt.Errorf("getting extension data: %q due to: %w", extpath, err)
 	}
 
 	appID := extData.appID
-	version := extData.version
 
-	err = s.uploadUpdate(appID, version, filepath)
+	file, err := os.Open(filepath.Clean(extpath))
 	if err != nil {
-		return fmt.Errorf("uploading update for extension: %s, version: %s, due to: %w", appID, version, err)
+		return fmt.Errorf("opening file: %q, due to: %w", extpath, err)
+	}
+	defer func() { err = errors.WithDeferred(err, file.Close()) }()
+
+	uploadDetail, err := s.API.CreateUpload(file, channel)
+	if err != nil {
+		return fmt.Errorf("creating upload: %w", err)
 	}
 
-	// TODO (maximtop): create throttler between requests, if requests are sent to fast, there is a chance that
-	//  the server will not found this version. And test it properly. Make sure tests do not run too much time.
-	time.Sleep(5 * time.Second)
-	err = s.awaitValidation(appID, version)
+	err = s.awaitUploadValidation(uploadDetail.UUID)
 	if err != nil {
-		return fmt.Errorf("awaiting validation of extension: %s, version: %s, due to: %w", appID, version, err)
+		return fmt.Errorf("awaiting validation: %w", err)
 	}
 
-	versionID, err := s.API.VersionID(appID, version)
+	versionInfo, err := s.API.CreateVersion(appID, uploadDetail.UUID)
 	if err != nil {
-		return fmt.Errorf("getting version for appID: %s, version: %s, due to: %w", appID, version, err)
+		return fmt.Errorf("creating version: %w", err)
 	}
 
-	// TODO (maximtop): write tests for this case
 	if sourcepath != "" {
-		// TODO (maximtop): create throttler between requests, if requests are sent to fast, there is a chance that
-		//  the server will return 429 error.
-		// wait 5 sec before uploading source code
-		time.Sleep(5 * time.Second)
-		err = s.uploadSource(appID, versionID, sourcepath)
+		cleanSourcePath := filepath.Clean(sourcepath)
+		sourceReader, err := os.Open(cleanSourcePath)
 		if err != nil {
-			return fmt.Errorf("uploading source for appID: %s, version: %s, sourcepath: %s, due to: %w", appID, version, sourcepath, err)
+			return fmt.Errorf("opening file: %q, due to: %w", cleanSourcePath, err)
+		}
+		err = s.API.AttachSourceToVersion(appID, strconv.Itoa(versionInfo.ID), sourceReader)
+		if err != nil {
+			return fmt.Errorf("attaching source to version: %w", err)
 		}
 	}
 
-	log.Debug("successfully uploaded update for extension: %s", filepath)
+	log.Debug("successfully uploaded update for extension: %s, with source: %s", extpath, sourcepath)
 
 	return nil
 }
 
-// Sign uploads the extension to the store, waits for signing, downloads and saves the signed
-// extension in the directory
-func (s *Store) Sign(filepath, sourcepath string) (filename string, err error) {
-	log.Debug("start signing extension: %s", filepath)
+// Sign uploads the extension to the store, waits for the signing process to complete, then downloads and saves the signed
+// extension in the specified directory. The unlisted channel is always used for signing.
+func (s *Store) Sign(extpath, sourcepath string) (filename string, err error) {
+	log.Debug("start signing extension: %s, source: %s", extpath, sourcepath)
 
-	extData, err := extDataFromFile(filepath)
+	cleanExtPath := filepath.Clean(extpath)
+	extData, err := extDataFromFile(cleanExtPath)
 	if err != nil {
-		return "", fmt.Errorf("getting extension data from file '%s': %w", filepath, err)
+		return "", fmt.Errorf("getting extension data: %q due to: %w", extpath, err)
 	}
 
 	appID := extData.appID
-	version := extData.version
 
-	err = s.uploadUpdate(appID, version, filepath)
+	file, err := os.Open(filepath.Clean(extpath))
 	if err != nil {
-		return "", fmt.Errorf("uploading extension '%s' with version '%s': %w", appID, version, err)
+		return "", fmt.Errorf("error opening file %q: %w", extpath, err)
+	}
+	defer func() { err = errors.WithDeferred(err, file.Close()) }()
+
+	uploadDetail, err := s.API.CreateUpload(file, ChannelUnlisted)
+	if err != nil {
+		return "", fmt.Errorf("error creating upload: %w", err)
 	}
 
-	// After uploading the extension, we upload the source code if sourcepath was provided.
+	err = s.awaitUploadValidation(uploadDetail.UUID)
+	if err != nil {
+		return "", fmt.Errorf("error waiting for validation: %w", err)
+	}
+
+	versionInfo, err := s.API.CreateVersion(appID, uploadDetail.UUID)
+	if err != nil {
+		return "", fmt.Errorf("error creating version: %w", err)
+	}
+
+	versionID := strconv.Itoa(versionInfo.ID)
+
 	if sourcepath != "" {
-		err = s.awaitValidation(appID, version)
+		cleanSourcePath := filepath.Clean(sourcepath)
+		sourceReader, err := os.Open(cleanSourcePath)
 		if err != nil {
-			return "", fmt.Errorf("validating extension '%s' with version '%s': %w", appID, version, err)
+			return "", fmt.Errorf("opening file: %q, due to: %w", cleanSourcePath, err)
 		}
-
-		versionID, err := s.API.VersionID(appID, version)
+		err = s.API.AttachSourceToVersion(appID, versionID, sourceReader)
 		if err != nil {
-			return "", fmt.Errorf("getting versionID for extension '%s' with version '%s': %w", appID, version, err)
-		}
-
-		err = s.uploadSource(appID, versionID, sourcepath)
-		if err != nil {
-			return "", fmt.Errorf("uploading source for extension '%s' with version '%s' and source path '%s': %w", appID, version, sourcepath, err)
+			return "", fmt.Errorf("error attaching source to version: %w", err)
 		}
 	}
 
-	err = s.awaitSigning(appID, version)
+	err = s.awaitVersionSigning(appID, versionID)
 	if err != nil {
-		return "", fmt.Errorf("waiting signing of extension '%s' with version '%s': %w", appID, version, err)
+		return "", fmt.Errorf("error waiting for signing of extension '%s' with versionID '%s': %w", appID, versionID, err)
 	}
 
-	filename, err = s.downloadSigned(appID, version)
+	filename, err = s.downloadSigned(appID, versionID)
 	if err != nil {
-		return "", fmt.Errorf("downloading signed extension '%s' with version '%s': %w", appID, version, err)
+		return "", fmt.Errorf("error downloading signed extension '%s' with versionID '%s': %w", appID, versionID, err)
 	}
 
 	return filename, nil
-}
-
-// Status returns status of the extension by appID.
-func (s *Store) Status(appID string) (result *StatusResponse, err error) {
-	log.Debug("getting status for extension: %s", appID)
-	response, err := s.API.Status(appID)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO (maximtop): make identical responses for all browsers
-	log.Debug("status response: %s", response)
-	return response, nil
 }

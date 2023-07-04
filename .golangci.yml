@@ -29,16 +29,14 @@ linters-settings:
 
 linters:
   enable:
-    - deadcode
     - errcheck
     - govet
     - ineffassign
     - staticcheck
-    - structcheck
     - unused
-    - varcheck
     - bodyclose
-    - depguard
+#    TODO enable later
+#    - depguard
     - dupl
     - gocyclo
     - goimports
@@ -48,7 +46,6 @@ linters:
     - stylecheck
     - unconvert
   disable-all: true
-  fast: true
 
 issues:
   exclude-use-default: false

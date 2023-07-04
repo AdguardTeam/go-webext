@@ -3,225 +3,270 @@ package firefox_test
 import (
 	"io"
 	"os"
-	"path/filepath"
+	"strconv"
 	"testing"
 
-	"github.com/AdguardTeam/golibs/errors"
-	"github.com/AdguardTeam/golibs/log"
 	"github.com/adguardteam/go-webext/internal/firefox"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	appID          = "test_app_id"
-	version        = "0.0.3"
+	testAppID      = "test_app_id"
+	testVersion    = "0.0.3"
 	testFilepath   = "testdata/extension.zip"
 	testSourcepath = "testdata/source.zip"
-	testVersionID  = "123456"
+	testVersionID  = 123456
+	testUUID       = "test_uuid"
+	testChannel    = firefox.ChannelListed
+	testURL        = "https://example.org/firefox.xpi"
 )
 
 type MockAPI struct {
-	mock.Mock
-}
-
-func (m *MockAPI) UploadStatus(appID, version string) (*firefox.UploadStatus, error) {
-	args := m.Called(appID, version)
-	return args.Get(0).(*firefox.UploadStatus), args.Error(1)
-}
-
-func (m *MockAPI) UploadSource(appID, versionID string, fileData io.Reader) error {
-	args := m.Called(appID, versionID, fileData)
-	return args.Error(0)
-}
-
-func (m *MockAPI) VersionID(appID, versionID string) (string, error) {
-	args := m.Called(appID, versionID)
-	return args.Get(0).(string), args.Error(1)
-}
-
-func (m *MockAPI) UploadNew(fileData io.Reader) error {
-	args := m.Called(fileData)
-	return args.Error(0)
-}
-
-func (m *MockAPI) UploadUpdate(appID, versionID string, fileData io.Reader) error {
-	args := m.Called(appID, versionID, fileData)
-	return args.Error(0)
-}
-
-func (m *MockAPI) DownloadSignedByURL(url string) ([]byte, error) {
-	args := m.Called(url)
-	return args.Get(0).([]byte), args.Error(1)
+	firefox.API
+	onStatus                func(appID string) (*firefox.StatusResponse, error)
+	onCreateUpload          func(fileData io.Reader, channel firefox.Channel) (*firefox.UploadDetail, error)
+	onUploadDetail          func(UUID string) (*firefox.UploadDetail, error)
+	onCreateAddon           func(UUID string) (*firefox.AddonInfo, error)
+	onAttachSourceToVersion func(appID, versionID string, sourceData io.Reader) error
+	onCreateVersion         func(appID, UUID string) (*firefox.VersionInfo, error)
+	onVersionDetail         func(appID, versionID string) (*firefox.VersionInfo, error)
+	onDownloadSignedByURL   func(url string) ([]byte, error)
 }
 
 func (m *MockAPI) Status(appID string) (*firefox.StatusResponse, error) {
-	args := m.Called(appID)
-	return args.Get(0).(*firefox.StatusResponse), args.Error(1)
+	return m.onStatus(appID)
 }
 
-func TestInsert(t *testing.T) {
-	mockAPI := &MockAPI{}
-	store := firefox.Store{API: mockAPI}
-
-	file, err := os.Open(filepath.Clean(testFilepath))
-	require.NoError(t, err)
-	defer func() { err = errors.WithDeferred(err, file.Close()) }()
-
-	mockAPI.On("UploadNew", mock.MatchedBy(func(fileArg *os.File) bool {
-		return fileArg.Name() == file.Name()
-	})).Return(nil)
-
-	expectedUploadStatus := &firefox.UploadStatus{
-		GUID:             "test",
-		Active:           false,
-		AutomatedSigning: false,
-		Files:            nil,
-		PassedReview:     true,
-		Pk:               "",
-		Processed:        true,
-		Reviewed:         true,
-		URL:              "",
-		Valid:            true,
-		ValidationURL:    "",
-		Version:          "",
-	}
-
-	mockAPI.On("UploadStatus", appID, version).Return(expectedUploadStatus, nil)
-	mockAPI.On("VersionID", appID, version).Return(testVersionID, nil)
-
-	sourceFile, err := os.Open(filepath.Clean(testSourcepath))
-	defer func() { err = errors.WithDeferred(err, sourceFile.Close()) }()
-
-	mockAPI.On("UploadSource", appID, testVersionID, mock.MatchedBy(func(fileArg *os.File) bool {
-		return fileArg.Name() == sourceFile.Name()
-	})).Return(nil)
-
-	err = store.Insert(testFilepath, testSourcepath)
-	require.NoError(t, err)
+func (m *MockAPI) CreateUpload(fileData io.Reader, channel firefox.Channel) (*firefox.UploadDetail, error) {
+	return m.onCreateUpload(fileData, channel)
 }
 
-func TestUpdate(t *testing.T) {
-	mockAPI := &MockAPI{}
-	store := firefox.Store{API: mockAPI}
-
-	file, err := os.Open(filepath.Clean(testFilepath))
-	require.NoError(t, err)
-	defer func() { err = errors.WithDeferred(err, file.Close()) }()
-
-	mockAPI.On("UploadUpdate", appID, version, mock.MatchedBy(func(fileArg *os.File) bool {
-		return fileArg.Name() == file.Name()
-	})).Return(nil)
-
-	expectedUploadStatus := &firefox.UploadStatus{
-		GUID:             "test",
-		Active:           false,
-		AutomatedSigning: false,
-		Files:            nil,
-		PassedReview:     true,
-		Pk:               "",
-		Processed:        true,
-		Reviewed:         true,
-		URL:              "",
-		Valid:            true,
-		ValidationURL:    "",
-		Version:          "",
-	}
-
-	mockAPI.On("UploadStatus", appID, version).Return(expectedUploadStatus, nil)
-
-	mockAPI.On("VersionID", appID, version).Return(testVersionID, nil)
-
-	mockAPI.On("UploadSource", appID, testVersionID, mock.MatchedBy(func(file *os.File) bool {
-		return file.Name() == testSourcepath
-	})).Return(nil)
-
-	err = store.Update(testFilepath, testSourcepath)
-	require.NoError(t, err)
+func (m *MockAPI) UploadDetail(UUID string) (*firefox.UploadDetail, error) {
+	return m.onUploadDetail(UUID)
 }
 
-func TestSign(t *testing.T) {
-	testFilename := "test.xpi"
-	testURL := "https://addons.mozilla.org/firefox/downloads/file/1234567/" + testFilename
+func (m *MockAPI) CreateAddon(UUID string) (*firefox.AddonInfo, error) {
+	return m.onCreateAddon(UUID)
+}
 
-	mockAPI := &MockAPI{}
-	file, err := os.Open(filepath.Clean(testFilepath))
-	defer func() { err = errors.WithDeferred(err, file.Close()) }()
+func (m *MockAPI) AttachSourceToVersion(appID, versionID string, sourceData io.Reader) error {
+	return m.onAttachSourceToVersion(appID, versionID, sourceData)
+}
 
-	mockAPI.On("UploadUpdate", appID, version, mock.MatchedBy(func(fileArg *os.File) bool {
-		log.Debug(fileArg.Name())
-		log.Debug(file.Name())
-		return fileArg.Name() == file.Name()
-	})).Return(nil)
+func (m *MockAPI) CreateVersion(appID, UUID string) (*firefox.VersionInfo, error) {
+	return m.onCreateVersion(appID, UUID)
+}
 
-	expectedUploadStatus := &firefox.UploadStatus{
-		GUID:             "test",
-		Active:           true,
-		AutomatedSigning: true,
-		Files: []firefox.UploadStatusFiles{
-			{
-				DownloadURL: testURL,
-				Hash:        "",
-				Signed:      true,
-			},
-		},
-		PassedReview:  true,
-		Pk:            "",
-		Processed:     true,
-		Reviewed:      true,
-		URL:           "",
-		Valid:         true,
-		ValidationURL: "",
-		Version:       "",
-	}
+func (m *MockAPI) VersionDetail(appID, versionID string) (*firefox.VersionInfo, error) {
+	return m.onVersionDetail(appID, versionID)
+}
 
-	mockAPI.On("UploadStatus", appID, version).Return(expectedUploadStatus, nil)
-
-	mockAPI.On("VersionID", appID, version).Return(testVersionID, nil)
-
-	sourcefile, err := os.Open(filepath.Clean(testSourcepath))
-	require.NoError(t, err)
-	defer func() { err = errors.WithDeferred(err, sourcefile.Close()) }()
-
-	mockAPI.On("UploadSource", appID, testVersionID, mock.MatchedBy(func(file *os.File) bool {
-		return file.Name() == testSourcepath
-	})).Return(nil)
-
-	mockAPI.On("DownloadSignedByURL", testURL).Return([]byte(""), nil)
-
-	store := firefox.Store{API: mockAPI}
-	actualFilename, err := store.Sign(testFilepath, testSourcepath)
-	require.NoError(t, err)
-
-	assert.Equal(t, testFilename, actualFilename)
-
-	// Check if the sourcefile exists.
-	_, err = os.Stat(testFilename)
-	require.NoError(t, err)
-
-	// Remove the sourcefile after the test run.
-	t.Cleanup(func() {
-		err = os.Remove(testFilename)
-		if err != nil {
-			t.Error("Failed to remove sourcefile:", err)
-		}
-	})
+func (m *MockAPI) DownloadSignedByURL(url string) ([]byte, error) {
+	return m.onDownloadSignedByURL(url)
 }
 
 func TestStatus(t *testing.T) {
 	expectedStatus := &firefox.StatusResponse{
-		ID:             appID,
-		Status:         "status",
-		CurrentVersion: version,
+		ID:             testAppID,
+		CurrentVersion: testVersion,
 	}
 
-	mockAPI := &MockAPI{}
+	mockAPI := &MockAPI{
+		onStatus: func(appID string) (*firefox.StatusResponse, error) {
+			require.Equal(t, testAppID, appID)
+			return expectedStatus, nil
+		},
+	}
 	store := firefox.Store{API: mockAPI}
 
-	mockAPI.On("Status", appID).Return(expectedStatus, nil)
-
-	actualStatus, err := store.Status(appID)
+	actualStatus, err := store.Status(testAppID)
 	require.NoError(t, err)
 	require.Equal(t, expectedStatus, actualStatus)
+}
+
+func TestInsert(t *testing.T) {
+	mockAPI := &MockAPI{
+		onCreateUpload: func(fileData io.Reader, c firefox.Channel) (*firefox.UploadDetail, error) {
+			require.Equal(t, firefox.ChannelUnlisted, c)
+
+			file, ok := fileData.(*os.File)
+			require.True(t, ok, "fileData should be a file")
+
+			actualPath := file.Name()
+
+			require.Equal(t, testFilepath, actualPath)
+
+			return &firefox.UploadDetail{
+				UUID: testUUID,
+			}, nil
+		},
+		onUploadDetail: func(UUID string) (*firefox.UploadDetail, error) {
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.UploadDetail{
+				UUID:      testUUID,
+				Processed: true,
+				Valid:     true,
+			}, nil
+		},
+		onCreateAddon: func(UUID string) (*firefox.AddonInfo, error) {
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.AddonInfo{
+				ID: 0,
+				Version: &firefox.VersionInfo{
+					ID: testVersionID,
+				},
+			}, nil
+		},
+		onAttachSourceToVersion: func(appID, versionID string, sourceData io.Reader) error {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, strconv.Itoa(testVersionID), versionID)
+
+			sourceFile, ok := sourceData.(*os.File)
+			require.True(t, ok, "sourceData should be a file")
+			actualPath := sourceFile.Name()
+			require.Equal(t, testSourcepath, actualPath)
+
+			return nil
+		},
+	}
+
+	store := firefox.Store{API: mockAPI}
+
+	err := store.Insert(testFilepath, testSourcepath)
+	require.NoError(t, err)
+}
+
+func TestUpdate(t *testing.T) {
+	mockAPI := &MockAPI{
+		onCreateUpload: func(fileData io.Reader, c firefox.Channel) (*firefox.UploadDetail, error) {
+			require.Equal(t, firefox.ChannelListed, c)
+
+			file, ok := fileData.(*os.File)
+			require.True(t, ok, "fileData should be a file")
+
+			actualPath := file.Name()
+
+			require.Equal(t, testFilepath, actualPath)
+
+			return &firefox.UploadDetail{
+				UUID: testUUID,
+			}, nil
+		},
+		onUploadDetail: func(UUID string) (*firefox.UploadDetail, error) {
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.UploadDetail{
+				UUID:      testUUID,
+				Processed: true,
+				Valid:     true,
+			}, nil
+		},
+		onCreateVersion: func(appID, UUID string) (*firefox.VersionInfo, error) {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.VersionInfo{
+				ID: testVersionID,
+			}, nil
+		},
+		onAttachSourceToVersion: func(appID, versionID string, sourceData io.Reader) error {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, strconv.Itoa(testVersionID), versionID)
+
+			sourceFile, ok := sourceData.(*os.File)
+			require.True(t, ok, "sourceData should be a file")
+			actualPath := sourceFile.Name()
+			require.Equal(t, testSourcepath, actualPath)
+
+			return nil
+		},
+	}
+	store := firefox.Store{API: mockAPI}
+
+	err := store.Update(testFilepath, testSourcepath, testChannel)
+	require.NoError(t, err)
+}
+
+func TestSign(t *testing.T) {
+	expectedFilename := "firefox.xpi"
+
+	mockAPI := &MockAPI{
+		onCreateUpload: func(fileData io.Reader, channel firefox.Channel) (*firefox.UploadDetail, error) {
+			file, ok := fileData.(*os.File)
+			require.True(t, ok, "fileData should be a file")
+
+			actualPath := file.Name()
+
+			require.Equal(t, testFilepath, actualPath)
+			// by default, the channel should be unlisted
+			require.Equal(t, firefox.ChannelUnlisted, channel)
+
+			return &firefox.UploadDetail{
+				UUID: testUUID,
+			}, nil
+		},
+		onUploadDetail: func(UUID string) (*firefox.UploadDetail, error) {
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.UploadDetail{
+				UUID:      testUUID,
+				Processed: true,
+				Valid:     true,
+			}, nil
+		},
+		onCreateVersion: func(appID, UUID string) (*firefox.VersionInfo, error) {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, testUUID, UUID)
+
+			return &firefox.VersionInfo{
+				ID: testVersionID,
+			}, nil
+		},
+		onAttachSourceToVersion: func(appID, versionID string, sourceData io.Reader) error {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, strconv.Itoa(testVersionID), versionID)
+
+			sourceFile, ok := sourceData.(*os.File)
+			require.True(t, ok, "sourceData should be a file")
+			actualPath := sourceFile.Name()
+			require.Equal(t, testSourcepath, actualPath)
+
+			return nil
+		},
+		onVersionDetail: func(appID, versionID string) (*firefox.VersionInfo, error) {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, strconv.Itoa(testVersionID), versionID)
+
+			return &firefox.VersionInfo{
+				File: firefox.FileInfo{
+					Status: "public",
+					URL:    testURL,
+				}}, nil
+		},
+		onDownloadSignedByURL: func(url string) ([]byte, error) {
+			require.Equal(t, testURL, url)
+
+			return []byte(""), nil
+		},
+	}
+	store := firefox.Store{API: mockAPI}
+
+	filename, err := store.Sign(testFilepath, testSourcepath)
+	assert.Equal(t, filename, expectedFilename)
+	require.NoError(t, err)
+
+	// Check if the sourcefile exists.
+	_, err = os.Stat(filename)
+	require.NoError(t, err)
+
+	// Remove the sourcefile after the test run.
+	t.Cleanup(func() {
+		err = os.Remove(filename)
+		if err != nil {
+			t.Error("Failed to remove sourcefile:", err)
+		}
+	})
 }

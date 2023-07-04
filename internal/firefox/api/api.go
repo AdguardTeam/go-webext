@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/adguardteam/go-webext/internal/fileutil"
 	"github.com/adguardteam/go-webext/internal/firefox"
@@ -49,6 +50,9 @@ const DefaultExtensionFilename = "extension.zip"
 // uploaded.
 const DefaultSourceFilename = "source.zip"
 
+// AddonsBasePathV5 is a base path for addons api v5.
+const AddonsBasePathV5 = "api/v5/addons"
+
 // API represents an instance of a remote API that the client can interact with.
 type API struct {
 	ClientID     string       // ClientID is the ID used for authentication.
@@ -57,12 +61,28 @@ type API struct {
 	URL          *url.URL     // URL is the base URL for the remote API.
 }
 
+// JoinPath joins the provided path parts with the base URL of the API.
+func (a *API) JoinPath(pathParts ...string) string {
+	paths := append([]string{AddonsBasePathV5}, pathParts...)
+	return a.URL.JoinPath(paths...).String()
+}
+
 // Config represents configuration options for creating a new API instance.
 type Config struct {
 	ClientID     string       // ClientID is the ID used for authentication.
 	ClientSecret string       // ClientSecret is the secret used for authentication.
 	Now          func() int64 // Now is a function that returns the current Unix time in seconds.
 	URL          *url.URL     // URL is the base URL for the remote API.
+}
+
+// VersionCreateRequest describes version json structure for request to the store api.
+type VersionCreateRequest struct {
+	Upload string `json:"upload"`
+}
+
+// AddonCreateRequest describes addon json structure to the store api.
+type AddonCreateRequest struct {
+	Version VersionCreateRequest `json:"version"`
 }
 
 // NewAPI creates a new instance of the API with the provided configuration
@@ -104,14 +124,6 @@ func AuthHeader(clientID, clientSecret string, currentTimeSec int64) (result str
 	return "JWT " + signedToken, nil
 }
 
-// TODO update to v5 only - AG-22187
-
-// AddonsBasePathV4 is a base path for addons api v4.
-const AddonsBasePathV4 = "api/v4/addons"
-
-// AddonsBasePathV5 is a base path for addons api v5.
-const AddonsBasePathV5 = "api/v5/addons"
-
 // prepareRequest creates a new HTTP request object.  The function adds an
 // authorization header using the client's credentials.
 func (a *API) prepareRequest(method, url string, body io.Reader) (*http.Request, error) {
@@ -125,7 +137,7 @@ func (a *API) prepareRequest(method, url string, body io.Reader) (*http.Request,
 		return nil, fmt.Errorf("generating auth header: %w", err)
 	}
 
-	req.Header.Add("Authorization", authHeader)
+	req.Header.Add(httphdr.Authorization, authHeader)
 
 	return req, nil
 }
@@ -162,16 +174,9 @@ func readBody(res *http.Response, allowedStatusCodes []int) (body []byte, err er
 	return body, nil
 }
 
-// AmoStatusResponse represents a response from the status request.
-type AmoStatusResponse struct {
-	GUID           string `json:"guid"`
-	Status         string `json:"status"`
-	CurrentVersion string `json:"current_version"`
-}
-
 // Status returns status of the extension by appID.
 func (a *API) Status(appID string) (response *firefox.StatusResponse, err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePathV4, "addon", appID).String()
+	apiURL := a.JoinPath("addon", appID)
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -191,29 +196,96 @@ func (a *API) Status(appID string) (response *firefox.StatusResponse, err error)
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
-	var amoResponse AmoStatusResponse
-	err = json.Unmarshal(responseBody, &amoResponse)
+	var addonDetail firefox.AddonInfo
+	err = json.Unmarshal(responseBody, &addonDetail)
 	if err != nil {
 		return nil, fmt.Errorf("decoding response body: %s, error: %w", responseBody, err)
 	}
 
+	var currentVersion string
+	if addonDetail.Version != nil {
+		currentVersion = addonDetail.Version.Version
+	} else if addonDetail.CurrentVersion != nil {
+		currentVersion = addonDetail.CurrentVersion.Version
+	} else if addonDetail.LatestUnlistedVersion != nil {
+		currentVersion = addonDetail.LatestUnlistedVersion.Version
+	} else {
+		return nil, fmt.Errorf("addon doesn't have any versions")
+	}
+
 	response = &firefox.StatusResponse{
-		ID:             amoResponse.GUID,
-		Status:         amoResponse.Status,
-		CurrentVersion: amoResponse.CurrentVersion,
+		ID:             addonDetail.GUID,
+		Status:         addonDetail.Status,
+		CurrentVersion: currentVersion,
 	}
 
 	return response, nil
 }
 
-// UploadStatus retrieves upload status of the extension.
-//
-// CURL example:
-//
-//	curl "https://addons.mozilla.org/api/v5/addons/@my-addon/versions/1.0/" \
-//		-g -H "Authorization: JWT <jwt-token>"
-func (a *API) UploadStatus(appID, version string) (response *firefox.UploadStatus, err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePathV4, appID, "versions", version).String()
+// CreateUpload creates new upload for the extension. Upload is a file with extension uploaded to amo servers.
+// After it is uploaded, it can be used to create new version of the extension.
+// https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#upload-create
+func (a *API) CreateUpload(fileData io.Reader, channel firefox.Channel) (result *firefox.UploadDetail, err error) {
+	log.Debug("creating upload (uploading extension file for further processing)")
+
+	// trailing slash is required
+	apiURL := a.JoinPath("upload", "/")
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	err = writer.WriteField("channel", string(channel))
+	if err != nil {
+		return nil, fmt.Errorf("writing field: %w", err)
+	}
+
+	part, err := writer.CreateFormFile("upload", DefaultExtensionFilename)
+	if err != nil {
+		return nil, fmt.Errorf("creating form file: %w", err)
+	}
+
+	_, err = io.Copy(part, fileData)
+	if err != nil {
+		return nil, fmt.Errorf("copying file error: %w", err)
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return nil, fmt.Errorf("closing writer: %w", err)
+	}
+
+	req, err := a.prepareRequest(http.MethodPost, apiURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("preparing request: %w", err)
+	}
+
+	req.Header.Set(httphdr.ContentType, writer.FormDataContentType())
+	client := &http.Client{Timeout: requestTimeout}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
+
+	responseBody, err := readBody(res, []int{http.StatusCreated, http.StatusAccepted})
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	err = json.Unmarshal(responseBody, &result)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", responseBody, err)
+	}
+
+	log.Debug("upload created successfully")
+
+	return result, nil
+}
+
+// UploadDetail retrieves upload status for the upload by id.
+func (a *API) UploadDetail(uuid string) (response *firefox.UploadDetail, err error) {
+	apiURL := a.JoinPath("upload", uuid)
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -233,22 +305,138 @@ func (a *API) UploadStatus(appID, version string) (response *firefox.UploadStatu
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
-	var uploadStatus firefox.UploadStatus
-
-	err = json.Unmarshal(body, &uploadStatus)
+	err = json.Unmarshal(body, &response)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshalling response body: %s, due to: %w", body, err)
+		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
 	}
 
-	log.Debug("received upload status: %+v", uploadStatus)
-
-	return &uploadStatus, nil
+	return response, nil
 }
 
-// UploadSource uploads source code of the extension to the store.
-// Source can be uploaded only after the extension is validated.
-func (a *API) UploadSource(appID, versionID string, fileData io.Reader) (err error) {
-	apiURL := a.URL.JoinPath(AddonsBasePathV5, "addon", appID, "versions", versionID, "/").String()
+// CreateAddon creates new addon in the store.
+func (a *API) CreateAddon(UUID string) (addonInfo *firefox.AddonInfo, err error) {
+	apiURL := a.JoinPath("addon", "/")
+
+	addonCreateRequest := AddonCreateRequest{
+		Version: VersionCreateRequest{
+			Upload: UUID,
+		},
+	}
+
+	jsonBody, err := json.Marshal(addonCreateRequest)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling request body: %w", err)
+	}
+
+	req, err := a.prepareRequest(http.MethodPost, apiURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("preparing request: %w", err)
+	}
+
+	req.Header.Set(httphdr.ContentType, "application/json")
+
+	client := &http.Client{Timeout: requestTimeout}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
+
+	body, err := readBody(res, []int{http.StatusCreated})
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	err = json.Unmarshal(body, &addonInfo)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
+	}
+
+	return addonInfo, nil
+}
+
+// CreateVersion creates new version for the extension with sourceData
+// https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-create
+func (a *API) CreateVersion(appID, UUID string) (versionInfo *firefox.VersionInfo, err error) {
+	apiURL := a.JoinPath("addon", appID, "versions", "/")
+
+	versionCreateRequest := VersionCreateRequest{
+		Upload: UUID,
+	}
+
+	jsonBody, err := json.Marshal(versionCreateRequest)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling request body: %w", err)
+	}
+
+	req, err := a.prepareRequest(http.MethodPost, apiURL, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("preparing request: %w", err)
+	}
+
+	req.Header.Set(httphdr.ContentType, "application/json")
+
+	client := &http.Client{Timeout: requestTimeout}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
+
+	body, err := readBody(res, []int{http.StatusCreated})
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	err = json.Unmarshal(body, &versionInfo)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
+	}
+
+	return versionInfo, nil
+}
+
+// VersionDetail returns current version details of the extension.
+func (a *API) VersionDetail(appID, versionID string) (versionInfo *firefox.VersionInfo, err error) {
+	log.Debug("api: VersionDetail: Getting version details appID: %s, versionID: %s", appID, versionID)
+
+	apiURL := a.JoinPath("addon", appID, "versions", versionID, "/")
+
+	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("preparing request: %w", err)
+	}
+
+	req.Header.Set(httphdr.ContentType, "application/json")
+	client := &http.Client{Timeout: requestTimeout}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending request: %w", err)
+	}
+	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
+
+	body, err := readBody(res, []int{http.StatusOK})
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	err = json.Unmarshal(body, &versionInfo)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
+	}
+
+	log.Debug("api: VersionDetail: version details successfully retrieved: %s", body)
+	return versionInfo, nil
+}
+
+// AttachSourceToVersion uploads source code to the specified version.
+// https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-sources
+func (a *API) AttachSourceToVersion(appID, versionID string, sourceData io.Reader) (err error) {
+	log.Debug("attaching source to appID: %s and versionID: %s", appID, versionID)
+
+	apiURL := a.JoinPath("addon", appID, "versions", versionID, "/")
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -258,7 +446,7 @@ func (a *API) UploadSource(appID, versionID string, fileData io.Reader) (err err
 		return fmt.Errorf("creating form file: %w", err)
 	}
 
-	_, err = io.Copy(part, fileData)
+	_, err = io.Copy(part, sourceData)
 	if err != nil {
 		return fmt.Errorf("copying file error: %w", err)
 	}
@@ -273,128 +461,8 @@ func (a *API) UploadSource(appID, versionID string, fileData io.Reader) (err err
 		return fmt.Errorf("preparing request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
+	req.Header.Set(httphdr.ContentType, writer.FormDataContentType())
 	client := &http.Client{Timeout: requestTimeout}
-	res, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
-
-	// ignore response body as it is not required
-	_, err = readBody(res, []int{http.StatusOK})
-	if err != nil {
-		return fmt.Errorf("reading response body: %w", err)
-	}
-
-	return nil
-}
-
-// ResultVersion describes response version structure.
-type ResultVersion struct {
-	ID      int    `json:"id"`
-	Version string `json:"version"`
-}
-
-// VersionsResponse describes response from the store api.
-type VersionsResponse struct {
-	PageSize  int             `json:"page_size"`
-	PageCount int             `json:"page_count"`
-	Count     int             `json:"count"`
-	Next      any             `json:"next"`
-	Previous  any             `json:"previous"`
-	Results   []ResultVersion `json:"results"`
-}
-
-// VersionID retrieves apps versions by appID.
-func (a *API) VersionID(appID, version string) (response string, err error) {
-	queryString := url.Values{}
-	queryString.Add("filter", "all_with_unlisted")
-	apiURL := a.URL.JoinPath(AddonsBasePathV4, "addon", appID, "versions").String() + "?" + queryString.Encode()
-
-	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("preparing request: %w", err)
-	}
-
-	client := &http.Client{Timeout: requestTimeout}
-	res, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("sending request: %w", err)
-	}
-	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
-
-	responseBody, err := readBody(res, []int{http.StatusOK})
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
-	}
-
-	var versionResponse VersionsResponse
-
-	err = json.Unmarshal(responseBody, &versionResponse)
-	if err != nil {
-		return "", fmt.Errorf("unmarshalling response body: %s, error: %w", responseBody, err)
-	}
-
-	var versionID string
-
-	for _, resultVersion := range versionResponse.Results {
-		if resultVersion.Version == version {
-			versionID = strconv.Itoa(resultVersion.ID)
-			break
-		}
-	}
-
-	if versionID == "" {
-		return "", fmt.Errorf("version %s not found", version)
-	}
-
-	return versionID, nil
-}
-
-// UploadNew uploads extension file to the store for the first time.
-//
-// CURL example:
-//
-//	curl -v -XPOST \
-//	 -H "Authorization: JWT ${ACCESS_TOKEN}" \
-//	 -F "upload=@tmp/extension.zip" \
-//	 "https://addons.mozilla.org/api/v5/addons/"
-//
-// More details find in [docs].
-//
-// [docs]: https://addons-server.readthedocs.io/en/latest/topics/api/signing.html?highlight=%2Faddons%2F#post--api-v5-addons-
-func (a *API) UploadNew(fileData io.Reader) (err error) {
-	// trailing slash is required for this request
-	apiURL := a.URL.JoinPath(AddonsBasePathV4, "/").String()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	part, err := writer.CreateFormFile("upload", DefaultExtensionFilename)
-	if err != nil {
-		return fmt.Errorf("creating form file: %w", err)
-	}
-
-	_, err = io.Copy(part, fileData)
-	if err != nil {
-		return fmt.Errorf("copying: %w", err)
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return fmt.Errorf("closing writer: %w", err)
-	}
-
-	req, err := a.prepareRequest(http.MethodPost, apiURL, body)
-	if err != nil {
-		return fmt.Errorf("preparing request: %w", err)
-	}
-
-	req.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := http.Client{Timeout: requestTimeout}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -402,58 +470,12 @@ func (a *API) UploadNew(fileData io.Reader) (err error) {
 	}
 	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
 
-	// ignore response body, as it is not required
-	_, err = readBody(res, []int{http.StatusCreated, http.StatusAccepted})
+	resBody, err := readBody(res, []int{http.StatusOK})
 	if err != nil {
 		return fmt.Errorf("reading response body: %w", err)
 	}
 
-	return nil
-}
-
-// UploadUpdate uploads the extension update.
-func (a *API) UploadUpdate(appID, version string, fileData io.Reader) (err error) {
-	// A trailing slash is required for this request.
-	apiURL := a.URL.JoinPath(AddonsBasePathV4, appID, "versions", version, "/").String()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	part, err := writer.CreateFormFile("upload", DefaultExtensionFilename)
-	if err != nil {
-		return fmt.Errorf("creating form file: %w", err)
-	}
-
-	_, err = io.Copy(part, fileData)
-	if err != nil {
-		return fmt.Errorf("copying file to the form file: %w", err)
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return fmt.Errorf("closing writer descriptor: %w", err)
-	}
-
-	client := http.Client{Timeout: requestTimeout}
-
-	req, err := a.prepareRequest(http.MethodPut, apiURL, body)
-	if err != nil {
-		return fmt.Errorf("preparing request: %w", err)
-	}
-
-	req.Header.Add("Content-Type", writer.FormDataContentType())
-
-	res, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("sending request: %w", err)
-	}
-	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
-
-	// ignore response body, as it is not required
-	_, err = readBody(res, []int{http.StatusCreated, http.StatusAccepted})
-	if err != nil {
-		return fmt.Errorf("reading response body: %w", err)
-	}
+	log.Debug("successfully attached, response: %s", resBody)
 
 	return nil
 }

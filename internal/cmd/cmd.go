@@ -226,8 +226,12 @@ func firefoxUpdateAction(c *cli.Context) error {
 
 	filepath := c.String("file")
 	sourcepath := c.String("source")
+	channel, err := firefox.NewChannel(c.String("channel"))
+	if err != nil {
+		return fmt.Errorf("parsing channel: %w", err)
+	}
 
-	err = store.Update(filepath, sourcepath)
+	err = store.Update(filepath, sourcepath, channel)
 	if err != nil {
 		return fmt.Errorf("updating extension: %w", err)
 	}
@@ -347,6 +351,7 @@ func Main() {
 		Usage:    "increase verbosity",
 		Category: "Miscellaneous:",
 	}
+	channelFlag := &cli.StringFlag{Name: "channel", Aliases: []string{"c"}, Required: true}
 
 	app.Flags = []cli.Flag{verboseFlag}
 
@@ -402,6 +407,7 @@ func Main() {
 			Flags: []cli.Flag{
 				fileFlag,
 				sourceFlag,
+				channelFlag,
 			},
 			Action: firefoxUpdateAction,
 		}, {
