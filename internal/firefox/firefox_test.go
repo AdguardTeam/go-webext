@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/adguardteam/go-webext/internal/firefox"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -254,17 +253,16 @@ func TestSign(t *testing.T) {
 	}
 	store := firefox.Store{API: mockAPI}
 
-	filename, err := store.Sign(testFilepath, testSourcepath)
-	assert.Equal(t, filename, expectedFilename)
+	err := store.Sign(testFilepath, testSourcepath, expectedFilename)
 	require.NoError(t, err)
 
 	// Check if the sourcefile exists.
-	_, err = os.Stat(filename)
+	_, err = os.Stat(expectedFilename)
 	require.NoError(t, err)
 
 	// Remove the sourcefile after the test run.
 	t.Cleanup(func() {
-		err = os.Remove(filename)
+		err = os.Remove(expectedFilename)
 		if err != nil {
 			t.Error("Failed to remove sourcefile:", err)
 		}

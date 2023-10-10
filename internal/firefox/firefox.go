@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -313,42 +311,40 @@ func (s *Store) awaitVersionSigning(appID, versionID string) (err error) {
 }
 
 // downloadSigned downloads signed extension.
-func (s *Store) downloadSigned(appID, versionID string) (filename string, err error) {
+// If output is empty, then it will be set to "firefox.xpi".
+func (s *Store) downloadSigned(appID, versionID, output string) error {
 	log.Debug("start downloading signed extension: %s", appID)
+
+	if output == "" {
+		output = "firefox.xpi"
+	}
 
 	versionDetail, err := s.API.VersionDetail(appID, versionID)
 	if err != nil {
-		return "", fmt.Errorf("getting version detail for appID: %s, versionID: %s, due to: %w", appID, versionID, err)
+		return fmt.Errorf("getting version detail for appID: %s, versionID: %s, due to: %w", appID, versionID, err)
 	}
 
 	downloadURL := versionDetail.File.URL
 
 	response, err := s.API.DownloadSignedByURL(downloadURL)
 	if err != nil {
-		return "", fmt.Errorf("downloading signed extension: %s, due to: %w", downloadURL, err)
+		return fmt.Errorf("downloading signed extension: %s, due to: %w", downloadURL, err)
 	}
 
-	parsedURL, err := url.Parse(downloadURL)
+	file, err := os.Create(filepath.Clean(output))
 	if err != nil {
-		return "", fmt.Errorf("parsing download URL: %s due to: %w", downloadURL, err)
-	}
-
-	filename = path.Base(parsedURL.Path)
-
-	file, err := os.Create(filepath.Clean(filename))
-	if err != nil {
-		return "", fmt.Errorf("creating file: %s due to: %w", filename, err)
+		return fmt.Errorf("creating file: %s due to: %w", output, err)
 	}
 
 	_, err = io.Copy(file, bytes.NewReader(response))
 	if err != nil {
-		return "", fmt.Errorf("writing response to file: %s due to: %w", filename, err)
+		return fmt.Errorf("writing response to file: %s due to: %w", output, err)
 	}
 	defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
 	log.Debug("successfully downloaded signed extension: %s", appID)
 
-	return filename, nil
+	return nil
 }
 
 // Status returns status of the extension by appID.
@@ -468,36 +464,36 @@ func (s *Store) Update(extpath, sourcepath string, channel Channel) (err error) 
 
 // Sign uploads the extension to the store, waits for the signing process to complete, then downloads and saves the signed
 // extension in the specified directory. The unlisted channel is always used for signing.
-func (s *Store) Sign(extpath, sourcepath string) (filename string, err error) {
+func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 	log.Debug("start signing extension: %s, source: %s", extpath, sourcepath)
 
 	cleanExtPath := filepath.Clean(extpath)
 	extData, err := extDataFromFile(cleanExtPath)
 	if err != nil {
-		return "", fmt.Errorf("getting extension data: %q due to: %w", extpath, err)
+		return fmt.Errorf("getting extension data: %q due to: %w", extpath, err)
 	}
 
 	appID := extData.appID
 
 	file, err := os.Open(filepath.Clean(extpath))
 	if err != nil {
-		return "", fmt.Errorf("error opening file %q: %w", extpath, err)
+		return fmt.Errorf("error opening file %q: %w", extpath, err)
 	}
 	defer func() { err = errors.WithDeferred(err, file.Close()) }()
 
 	uploadDetail, err := s.API.CreateUpload(file, ChannelUnlisted)
 	if err != nil {
-		return "", fmt.Errorf("error creating upload: %w", err)
+		return fmt.Errorf("error creating upload: %w", err)
 	}
 
 	err = s.awaitUploadValidation(uploadDetail.UUID)
 	if err != nil {
-		return "", fmt.Errorf("error waiting for validation: %w", err)
+		return fmt.Errorf("error waiting for validation: %w", err)
 	}
 
 	versionInfo, err := s.API.CreateVersion(appID, uploadDetail.UUID)
 	if err != nil {
-		return "", fmt.Errorf("error creating version: %w", err)
+		return fmt.Errorf("error creating version: %w", err)
 	}
 
 	versionID := strconv.Itoa(versionInfo.ID)
@@ -506,23 +502,23 @@ func (s *Store) Sign(extpath, sourcepath string) (filename string, err error) {
 		cleanSourcePath := filepath.Clean(sourcepath)
 		sourceReader, err := os.Open(cleanSourcePath)
 		if err != nil {
-			return "", fmt.Errorf("opening file: %q, due to: %w", cleanSourcePath, err)
+			return fmt.Errorf("opening file: %q, due to: %w", cleanSourcePath, err)
 		}
 		err = s.API.AttachSourceToVersion(appID, versionID, sourceReader)
 		if err != nil {
-			return "", fmt.Errorf("error attaching source to version: %w", err)
+			return fmt.Errorf("error attaching source to version: %w", err)
 		}
 	}
 
 	err = s.awaitVersionSigning(appID, versionID)
 	if err != nil {
-		return "", fmt.Errorf("error waiting for signing of extension '%s' with versionID '%s': %w", appID, versionID, err)
+		return fmt.Errorf("error waiting for signing of extension '%s' with versionID '%s': %w", appID, versionID, err)
 	}
 
-	filename, err = s.downloadSigned(appID, versionID)
+	err = s.downloadSigned(appID, versionID, output)
 	if err != nil {
-		return "", fmt.Errorf("error downloading signed extension '%s' with versionID '%s': %w", appID, versionID, err)
+		return fmt.Errorf("error downloading signed extension '%s' with versionID '%s': %w", appID, versionID, err)
 	}
 
-	return filename, nil
+	return nil
 }

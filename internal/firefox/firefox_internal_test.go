@@ -47,7 +47,7 @@ func (a *testAPI) VersionDetail(appID, version string) (*VersionInfo, error) {
 }
 
 func TestDownloadSigned(t *testing.T) {
-	expectedFilename := "signed.xpi"
+	expectedFilename := "firefox.xpi"
 	expectedURL := urlutil.JoinPath("https://addons.mozilla.org/files", expectedFilename)
 
 	versionInfo := &VersionInfo{
@@ -69,10 +69,8 @@ func TestDownloadSigned(t *testing.T) {
 	}
 
 	store := Store{API: mockAPI}
-	actualFilename, err := store.downloadSigned(testAppID, testVersion)
+	err := store.downloadSigned(testAppID, testVersion, expectedFilename)
 	require.NoError(t, err)
-
-	assert.Equal(t, expectedFilename, actualFilename)
 
 	// Check if the file exists.
 	_, err = os.Stat(expectedFilename)

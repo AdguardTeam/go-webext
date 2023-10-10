@@ -307,14 +307,14 @@ func firefoxSignAction(c *cli.Context) error {
 
 	filepath := c.String("file")
 	sourcepath := c.String("source")
+	output := c.String("output")
 
-	filename, err := store.Sign(filepath, sourcepath)
+	err = store.Sign(filepath, sourcepath, output)
 	if err != nil {
 		return fmt.Errorf("signing extension: %w", err)
 	}
 
-	fmt.Println(filename)
-
+	fmt.Printf("Signed file saved to %s\n", output)
 	return nil
 }
 
@@ -447,6 +447,12 @@ func Main() {
 			Flags: []cli.Flag{
 				fileFlag,
 				sourceFlag,
+				&cli.StringFlag{
+					Name:     "output",
+					Aliases:  []string{"o"},
+					Value:    "firefox.xpi", // Default value
+					Required: false,
+				},
 			},
 			Action: firefoxSignAction,
 		}},
