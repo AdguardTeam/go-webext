@@ -23,8 +23,9 @@ type Client struct {
 	RefreshToken string
 }
 
+// TODO make configurable
 // maxReadLimit limits response size returned from the store.
-const maxReadLimit = 10 * fileutil.MB
+const maxReadLimit = 100 * fileutil.MB
 
 // AuthorizeResponse describes the response received from the Chrome Store
 // authorization request.

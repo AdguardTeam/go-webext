@@ -39,8 +39,9 @@ import (
 // TODO (maximtop): consider to make this constant an option.
 const requestTimeout = 20 * time.Minute
 
+// TODO make configurable
 // maxReadLimit limits response size returned from the store api.
-const maxReadLimit = 10 * fileutil.MB
+const maxReadLimit = 100 * fileutil.MB
 
 // DefaultExtensionFilename is the default filename for the extension zip file to be
 // uploaded.
