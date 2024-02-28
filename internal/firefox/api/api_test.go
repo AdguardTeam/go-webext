@@ -425,3 +425,50 @@ func TestVersionDetail(t *testing.T) {
 
 	assert.Equal(t, versionInfo, expectedVersionInfo)
 }
+
+func TestVersionsList(t *testing.T) {
+	expectedVersionInfo := &firefox.VersionInfo{
+		ID: 12345,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pt := testutil.PanicT{}
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, r.URL.Path, urlutil.JoinPath(api.AddonsBasePathV5, "addon", appID, "versions", "/"))
+
+		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
+		require.NoError(pt, err)
+		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+
+		response, err := json.Marshal(firefox.VersionsListResponse{
+			Count: 1,
+			Results: []firefox.VersionInfo{
+				*expectedVersionInfo,
+			},
+		})
+		require.NoError(pt, err)
+
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write(response)
+		require.NoError(pt, err)
+	}))
+
+	defer server.Close()
+
+	storeURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	firefoxAPI := api.NewAPI(api.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return testTime
+		},
+		URL: storeURL,
+	})
+
+	versionsList, err := firefoxAPI.VersionsList(appID)
+	require.NoError(t, err)
+
+	assert.Equal(t, []*firefox.VersionInfo{expectedVersionInfo}, versionsList)
+}

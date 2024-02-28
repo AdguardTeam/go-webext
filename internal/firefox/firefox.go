@@ -154,6 +154,14 @@ type VersionInfo struct {
 	Version                      string        `json:"version"`
 }
 
+// VersionsListResponse represents list of versions.
+type VersionsListResponse struct {
+	Count    int           `json:"count"`
+	Next     string        `json:"next"`
+	Previous string        `json:"previous"`
+	Results  []VersionInfo `json:"results"`
+}
+
 // AddonInfo describes request body for addon creation.
 // Actually info structure is bigger, but we don't need it.
 // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#get--api-v5-addons-addon-(int-id|string-slug|string-guid)-
@@ -241,6 +249,7 @@ type API interface {
 	VersionDetail(appID, versionID string) (versionInfo *VersionInfo, err error)
 	CreateAddon(UUID string) (*AddonInfo, error)
 	AttachSourceToVersion(appID, versionID string, sourceData io.Reader) (err error)
+	VersionsList(appID string) ([]*VersionInfo, error)
 }
 
 // awaitUploadValidation awaits validation of the upload.
@@ -462,8 +471,52 @@ func (s *Store) Update(extpath, sourcepath string, channel Channel) (err error) 
 	return nil
 }
 
+// getVersionID returns versionID for the appID and version.
+func (s *Store) getVersionID(appID, version string) (versionID string, err error) {
+	versionsList, err := s.API.VersionsList(appID)
+	if err != nil {
+		return "", fmt.Errorf("getting versions list for appID: %s, due to: %w", appID, err)
+	}
+
+	for _, v := range versionsList {
+		if v.Version == version {
+			log.Debug("Version: %+v", v)
+			return strconv.Itoa(v.ID), nil
+		}
+	}
+
+	return "", nil
+}
+
+// hasVersion checks if a specific version of the app is already uploaded and is in a valid state.
+func (s *Store) hasVersion(appID, version string) (versionID string, err error) {
+	versionID, err = s.getVersionID(appID, version)
+	if err != nil {
+		return "", err
+	}
+	return versionID, err
+}
+
+// isSigned checks if the extension is already uploaded and signed.
+func (s *Store) isSigned(appID, versionID string) (bool, error) {
+	versionDetail, err := s.API.VersionDetail(appID, versionID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get upload status for appID: %s, versionID: %s, error: %w", appID, versionID, err)
+	}
+
+	if versionDetail.File.Status == "public" {
+		log.Debug("firefox: hasVersion: extension is signed and ready for download, version detail: %+v", versionDetail)
+		return true, nil
+	} else if versionDetail.File.Status == "disabled" {
+		return false, fmt.Errorf("extension will not be signed automatically, version detail: %+v", versionDetail)
+	}
+
+	return false, fmt.Errorf("extension is pending signature, version detail: %+v", versionDetail)
+}
+
 // Sign uploads the extension to the store, waits for the signing process to complete, then downloads and saves the signed
 // extension in the specified directory. The unlisted channel is always used for signing.
+// If the extension is already uploaded, it will be downloaded and saved in the specified directory.
 func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 	log.Debug("start signing extension: %s, source: %s", extpath, sourcepath)
 
@@ -474,6 +527,28 @@ func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 	}
 
 	appID := extData.appID
+	version := extData.version
+
+	// if the extension is already uploaded and signed, download it
+	versionID, err := s.hasVersion(appID, version)
+	if err != nil {
+		return fmt.Errorf("checking version: %w", err)
+	}
+	if versionID != "" {
+		isSigned, err := s.isSigned(appID, versionID)
+		if err != nil {
+			return fmt.Errorf("checking if extension is signed: %w", err)
+		}
+		if isSigned {
+			err = s.downloadSigned(appID, versionID, output)
+			if err != nil {
+				return fmt.Errorf("error downloading already existing and signed extension '%s' with versionID '%s': %w", appID, versionID, err)
+			}
+			return nil
+		}
+		log.Info("extensions with appID: '%s' and version: %s is uploaded, but not signed yet", appID, version)
+		return nil
+	}
 
 	file, err := os.Open(filepath.Clean(extpath))
 	if err != nil {
@@ -496,7 +571,7 @@ func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 		return fmt.Errorf("error creating version: %w", err)
 	}
 
-	versionID := strconv.Itoa(versionInfo.ID)
+	versionID = strconv.Itoa(versionInfo.ID)
 
 	if sourcepath != "" {
 		cleanSourcePath := filepath.Clean(sourcepath)

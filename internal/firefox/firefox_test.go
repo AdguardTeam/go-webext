@@ -31,6 +31,7 @@ type MockAPI struct {
 	onCreateVersion         func(appID, UUID string) (*firefox.VersionInfo, error)
 	onVersionDetail         func(appID, versionID string) (*firefox.VersionInfo, error)
 	onDownloadSignedByURL   func(url string) ([]byte, error)
+	onVersionsList          func(appID string) ([]*firefox.VersionInfo, error)
 }
 
 func (m *MockAPI) Status(appID string) (*firefox.StatusResponse, error) {
@@ -63,6 +64,10 @@ func (m *MockAPI) VersionDetail(appID, versionID string) (*firefox.VersionInfo, 
 
 func (m *MockAPI) DownloadSignedByURL(url string) ([]byte, error) {
 	return m.onDownloadSignedByURL(url)
+}
+
+func (m *MockAPI) VersionsList(appID string) ([]*firefox.VersionInfo, error) {
+	return m.onVersionsList(appID)
 }
 
 func TestStatus(t *testing.T) {
@@ -249,6 +254,9 @@ func TestSign(t *testing.T) {
 			require.Equal(t, testURL, url)
 
 			return []byte(""), nil
+		},
+		onVersionsList: func(appID string) ([]*firefox.VersionInfo, error) {
+			return []*firefox.VersionInfo{}, nil
 		},
 	}
 	store := firefox.Store{API: mockAPI}

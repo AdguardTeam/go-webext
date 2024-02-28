@@ -1,5 +1,10 @@
 # go-webext changelog
 
+## 0.1.3 (2024-02-28)
+
+### Changed
+- Download already signed files instead of uploading again.
+
 ## 0.1.2 (2023-10-19)
 
 ### Changed

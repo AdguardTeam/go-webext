@@ -398,6 +398,57 @@ func (a *API) CreateVersion(appID, UUID string) (versionInfo *firefox.VersionInf
 	return versionInfo, nil
 }
 
+// VersionsList retrieves a complete list of versions for the specified extension.
+func (a *API) VersionsList(appID string) ([]*firefox.VersionInfo, error) {
+	var versions []*firefox.VersionInfo
+	page := 1
+	filter := "all_with_unlisted"
+
+	for {
+		apiURL := a.JoinPath("addon", appID, "versions/")
+
+		req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("preparing request: %w", err)
+		}
+
+		q := req.URL.Query()
+		q.Add("filter", filter)
+		q.Add("page", strconv.Itoa(page))
+		req.URL.RawQuery = q.Encode()
+
+		client := &http.Client{Timeout: requestTimeout}
+
+		res, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("sending request: %w", err)
+		}
+		defer func() { _ = res.Body.Close() }()
+
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status code: %d", res.StatusCode)
+		}
+
+		versionsListResponse := firefox.VersionsListResponse{}
+
+		if err := json.NewDecoder(res.Body).Decode(&versionsListResponse); err != nil {
+			return nil, fmt.Errorf("unmarshalling response body: %w", err)
+		}
+
+		for i := range versionsListResponse.Results {
+			versions = append(versions, &versionsListResponse.Results[i])
+		}
+
+		if versionsListResponse.Next == "" {
+			break // Exit the loop if there are no more pages
+		}
+
+		page++
+	}
+
+	return versions, nil
+}
+
 // VersionDetail returns current version details of the extension.
 func (a *API) VersionDetail(appID, versionID string) (versionInfo *firefox.VersionInfo, err error) {
 	log.Debug("api: VersionDetail: Getting version details appID: %s, versionID: %s", appID, versionID)
