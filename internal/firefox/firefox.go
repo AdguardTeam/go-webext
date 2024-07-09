@@ -174,9 +174,8 @@ type AddonInfo struct {
 		Username   string      `json:"username"`
 		PictureURL interface{} `json:"picture_url"`
 	} `json:"authors"`
-	AverageDailyUsers int `json:"average_daily_users"`
-	Categories        struct {
-	} `json:"categories"`
+	AverageDailyUsers int          `json:"average_daily_users"`
+	Categories        struct{}     `json:"categories"`
 	ContributionsURL  string       `json:"contributions_url"`
 	Created           time.Time    `json:"created"`
 	CurrentVersion    *VersionInfo `json:"current_version"`
@@ -275,6 +274,17 @@ func (s *Store) awaitUploadValidation(UUID string) (err error) {
 			if uploadDetail.Valid {
 				log.Debug("firefox: awaitUploadValidation: extension with uuid: %s is valid", UUID)
 			} else {
+				log.Debug("firefox: awaitUploadValidation: extension with uuid: %s is not valid", UUID)
+
+				// Pretty print upload details
+				prettyJSON, err := json.MarshalIndent(uploadDetail, "", "    ")
+				if err != nil {
+					return fmt.Errorf("failed to generate pretty JSON: %w", err)
+				}
+
+				// Log pretty printed JSON
+				log.Debug("firefox: awaitUploadValidation: upload details: %s", prettyJSON)
+
 				return fmt.Errorf("not valid, validation url: %s", uploadDetail.URL)
 			}
 			break

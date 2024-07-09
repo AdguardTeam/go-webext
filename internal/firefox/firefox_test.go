@@ -248,7 +248,8 @@ func TestSign(t *testing.T) {
 				File: firefox.FileInfo{
 					Status: "public",
 					URL:    testURL,
-				}}, nil
+				},
+			}, nil
 		},
 		onDownloadSignedByURL: func(url string) ([]byte, error) {
 			require.Equal(t, testURL, url)
