@@ -10,6 +10,18 @@ Utils for managing web extensions written in Go.
 go install github.com/adguardteam/go-webext
 ```
 
+### Deployment
+
+To release a new version:
+
+1. Create a new release on GitHub
+2. Add a new tag following semantic versioning (e.g., v0.1.3)
+
+Users can install a specific version using:
+```bash
+go install github.com/adguardteam/go-webext@v0.1.3
+```
+
 ### Usage:
 
 Before start, you have to get credentials to the stores API.
@@ -34,24 +46,36 @@ that go to the following link: https://addons.mozilla.org/en-US/developers/addon
 
 #### Edge Credentials
 
-Description about getting credentials for Microsoft Edge Addons Store can be found
-here: https://docs.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/api/using-addons-api#before-you-begin
+Microsoft Edge Addons Store now supports two API versions:
+- v1.1 (Recommended) - Uses API Key authentication
+- v1.0 (Deprecated) - Uses Client Secret and Access Token URL
+
+**Important Note**: Microsoft is deprecating v1.0 API. You should migrate to v1.1 as soon as possible because:
+- Secrets are being deprecated and replaced with API keys
+- Access Token URL is being deprecated
+- API key expiration will reduce from 2 years to 72 days
+
+For v1.1 API credentials setup, visit: https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/api/using-addons-api?tabs=v1-1
 
 #### Environment variables
 
 Received credentials can be stored in the `.env` file or provided via environment variables.
 
+For Edge Store v1.1 (Recommended):
 ```dotenv
-CHROME_CLIENT_ID=<client_id>
-CHROME_CLIENT_SECRET=<client_secret>
-CHROME_REFRESH_TOKEN=<refresh_token>
+EDGE_CLIENT_ID=<client_id>
+EDGE_API_KEY=<api_key>
+EDGE_API_VERSION="v1.1"
+```
 
-FIREFOX_CLIENT_ID=<client_id>
-FIREFOX_CLIENT_SECRET=<client_secret>
+**Note**: The Edge API key might contain special characters that need to be escaped correctly. You can use the `godotenv` library to handle this. For more details on writing env files, refer to the [godotenv documentation](https://github.com/joho/godotenv?tab=readme-ov-file#writing-env-files).
 
+For Edge Store v1.0 (Deprecated):
+```dotenv
 EDGE_CLIENT_ID=<client_id>
 EDGE_CLIENT_SECRET=<client_secret>
 EDGE_ACCESS_TOKEN_URL=<access_token_url>
+EDGE_API_VERSION="v1"
 ```
 
 After that, you can use the CLI.

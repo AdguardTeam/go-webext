@@ -80,28 +80,42 @@ func getFirefoxStore() (*firefox.Store, error) {
 func getEdgeStore() (*edge.Store, error) {
 	type config struct {
 		ClientID       string `env:"EDGE_CLIENT_ID,notEmpty"`
-		ClientSecret   string `env:"EDGE_CLIENT_SECRET,notEmpty"`
-		AccessTokenURL string `env:"EDGE_ACCESS_TOKEN_URL,notEmpty"`
+		ClientSecret   string `env:"EDGE_CLIENT_SECRET"`
+		AccessTokenURL string `env:"EDGE_ACCESS_TOKEN_URL"`
+		APIKey         string `env:"EDGE_API_KEY"`
+		APIVersion     string `env:"EDGE_API_VERSION" envDefault:"v1"`
 	}
 
 	cfg := config{}
+
 	if err := env.Parse(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
 	}
 
-	accessTokenURL, err := url.Parse(cfg.AccessTokenURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse access token URL: %w", err)
+	var clientConfig edge.ClientConfig
+
+	if cfg.APIVersion == edge.APIVersionV1 {
+		if cfg.ClientSecret == "" || cfg.AccessTokenURL == "" {
+			return nil, fmt.Errorf("EDGE_CLIENT_SECRET and EDGE_ACCESS_TOKEN_URL are required for v1")
+		}
+		accessTokenURL, err := url.Parse(cfg.AccessTokenURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse access token URL: %w", err)
+		}
+		clientConfig = edge.NewV1Config(cfg.ClientID, cfg.ClientSecret, accessTokenURL)
+	} else if cfg.APIVersion == edge.APIVersionV1_1 {
+		if cfg.APIKey == "" {
+			return nil, fmt.Errorf("EDGE_API_KEY is required for v1.1")
+		}
+		clientConfig = edge.NewV1_1Config(cfg.ClientID, cfg.APIKey)
+	} else {
+		return nil, fmt.Errorf("unsupported API version: %s", cfg.APIVersion)
 	}
 
-	client := edge.Client{
-		ClientID:       cfg.ClientID,
-		ClientSecret:   cfg.ClientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
+	client := edge.NewClient(clientConfig)
 
 	store := edge.Store{
-		Client: &client,
+		Client: client,
 		URL: &url.URL{
 			Scheme: "https",
 			Host:   "api.addons.microsoftedge.microsoft.com",

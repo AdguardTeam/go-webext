@@ -19,31 +19,69 @@ import (
 
 const requestTimeout = 30 * time.Second
 
-// Client represent the edge client.
-type Client struct {
-	ClientID       string
-	ClientSecret   string
-	AccessTokenURL *url.URL
+// API versions
+const (
+	// APIVersionV1 represents the v1 API version (default)
+	APIVersionV1 = "v1"
+	// APIVersionV1_1 represents the v1.1 API version
+	APIVersionV1_1 = "v1.1"
+)
+
+// ClientConfig defines the behavior for different client configurations.
+type ClientConfig interface {
+	SetRequestHeaders(req *http.Request) error
 }
 
-// AuthorizeResponse describes the response received from the Edge Store
-// authorization request.
-type AuthorizeResponse struct {
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-	AccessToken string `json:"access_token"`
+// V1Config is the configuration for the v1 API.
+type V1Config struct {
+	clientID       string
+	clientSecret   string
+	accessTokenURL *url.URL
 }
 
-// Authorize returns the access token.
-func (c *Client) Authorize() (accessToken string, err error) {
+// NewV1Config creates a new V1Config with the specified parameters.
+func NewV1Config(clientID, clientSecret string, accessTokenURL *url.URL) *V1Config {
+	return &V1Config{
+		clientID:       clientID,
+		clientSecret:   clientSecret,
+		accessTokenURL: accessTokenURL,
+	}
+}
+
+// V1_1Config is the configuration for the v1.1 API.
+type V1_1Config struct {
+	clientID string
+	apiKey   string
+}
+
+// NewV1_1Config creates a new V1_1Config with the specified parameters.
+func NewV1_1Config(clientID, apiKey string) *V1_1Config {
+	return &V1_1Config{
+		clientID: clientID,
+		apiKey:   apiKey,
+	}
+}
+
+// SetRequestHeaders sets the authorization headers for the request using v1 API configuration.
+func (c *V1Config) SetRequestHeaders(req *http.Request) error {
+	accessToken, err := c.authorize()
+	if err != nil {
+		return fmt.Errorf("authorizing: %w", err)
+	}
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+	return nil
+}
+
+// Authorize performs the authorization for v1 API and returns an access token.
+func (c *V1Config) authorize() (string, error) {
 	form := url.Values{
-		"client_id":     {c.ClientID},
+		"client_id":     {c.clientID},
 		"scope":         {"https://api.addons.microsoftedge.microsoft.com/.default"},
-		"client_secret": {c.ClientSecret},
+		"client_secret": {c.clientSecret},
 		"grant_type":    {"client_credentials"},
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.AccessTokenURL.String(), strings.NewReader(form.Encode()))
+	req, err := http.NewRequest(http.MethodPost, c.accessTokenURL.String(), strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
@@ -71,6 +109,28 @@ func (c *Client) Authorize() (accessToken string, err error) {
 	}
 
 	return authorizeResponse.AccessToken, nil
+}
+
+// SetRequestHeaders sets the authorization headers for the request using v1.1 API configuration.
+func (c *V1_1Config) SetRequestHeaders(req *http.Request) error {
+	req.Header.Add("Authorization", "ApiKey "+c.apiKey)
+	req.Header.Add("X-ClientID", c.clientID)
+	return nil
+}
+
+// Client represents the edge client.
+type Client struct {
+	config ClientConfig
+}
+
+// NewClient creates a new Client with the specified configuration.
+func NewClient(config ClientConfig) *Client {
+	return &Client{config: config}
+}
+
+// setRequestHeaders sets the authorization headers for the request using the client's configuration.
+func (c *Client) setRequestHeaders(req *http.Request) error {
+	return c.config.SetRequestHeaders(req)
 }
 
 // Store represents the edge store instance
@@ -248,12 +308,11 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	accessToken, err := s.Client.Authorize()
+	err = s.Client.setRequestHeaders(req)
 	if err != nil {
-		return "", fmt.Errorf("authorizing: %w", err)
+		return "", err
 	}
 
-	req.Header.Add("Authorization", "Bearer "+accessToken)
 	req.Header.Add("Content-Type", "application/zip")
 
 	client := http.Client{}
@@ -287,12 +346,10 @@ func (s Store) UploadStatus(appID, operationID string) (response *UploadStatusRe
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	accessToken, err := s.Client.Authorize()
+	err = s.Client.setRequestHeaders(req)
 	if err != nil {
-		return nil, fmt.Errorf("authorizing: %w", err)
+		return nil, err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	client := http.Client{
 		Timeout: requestTimeout,
@@ -328,12 +385,10 @@ func (s Store) PublishExtension(appID string) (result string, err error) {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	accessToken, err := s.Client.Authorize()
+	err = s.Client.setRequestHeaders(req)
 	if err != nil {
-		return "", fmt.Errorf("authorizing: %w", err)
+		return "", err
 	}
-
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	client := http.Client{Timeout: requestTimeout}
 
@@ -372,17 +427,15 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 	apiPath := "v1/products/"
 	apiURL := s.URL.JoinPath(apiPath, appID, "submissions/operations", operationID).String()
 
-	accessToken, err := s.Client.Authorize()
-	if err != nil {
-		return nil, fmt.Errorf("authorizing: %w", err)
-	}
-
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	err = s.Client.setRequestHeaders(req)
+	if err != nil {
+		return nil, err
+	}
 
 	client := http.Client{Timeout: requestTimeout}
 
@@ -422,4 +475,12 @@ func (s Store) Publish(appID string) (response *PublishStatusResponse, err error
 	}
 
 	return s.PublishStatus(appID, operationID)
+}
+
+// AuthorizeResponse describes the response received from the Edge Store
+// authorization request.
+type AuthorizeResponse struct {
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+	AccessToken string `json:"access_token"`
 }

@@ -43,41 +43,6 @@ const (
 	operationID  = "test_operation_id"
 )
 
-func TestAuthorize(t *testing.T) {
-	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		assert.Equal(t, req.Method, http.MethodPost)
-		assert.Equal(t, req.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
-		assert.Equal(t, req.FormValue("client_id"), clientID)
-		assert.Equal(t, req.FormValue("scope"), "https://api.addons.microsoftedge.microsoft.com/.default")
-		assert.Equal(t, req.FormValue("client_secret"), clientSecret)
-		assert.Equal(t, req.FormValue("grant_type"), "client_credentials")
-
-		response, err := json.Marshal(edge.AuthorizeResponse{
-			TokenType:   "",
-			ExpiresIn:   0,
-			AccessToken: accessToken,
-		})
-		require.NoError(t, err)
-
-		_, err = w.Write(response)
-		require.NoError(t, err)
-	}))
-
-	accessTokenURL, err := url.Parse(authServer.URL)
-	require.NoError(t, err)
-
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
-
-	actualAccessToken, err := client.Authorize()
-	require.NoError(t, err)
-
-	assert.Equal(t, accessToken, actualAccessToken)
-}
-
 func TestUploadUpdate(t *testing.T) {
 	t.Run("uploads update", func(t *testing.T) {
 		operationID := "test_operation_id"
@@ -88,11 +53,8 @@ func TestUploadUpdate(t *testing.T) {
 		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		client := edge.Client{
-			ClientID:       clientID,
-			ClientSecret:   clientSecret,
-			AccessTokenURL: accessTokenURL,
-		}
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
@@ -117,7 +79,7 @@ func TestUploadUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		store := edge.Store{
-			Client: &client,
+			Client: client,
 			URL:    storeURL,
 		}
 
@@ -140,11 +102,8 @@ func TestUploadUpdate(t *testing.T) {
 		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		client := edge.Client{
-			ClientID:       clientID,
-			ClientSecret:   clientSecret,
-			AccessTokenURL: accessTokenURL,
-		}
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(serverResponseDuration)
@@ -157,7 +116,7 @@ func TestUploadUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		store := edge.Store{
-			Client: &client,
+			Client: client,
 			URL:    storeURL,
 		}
 
@@ -186,11 +145,8 @@ func TestUploadStatus(t *testing.T) {
 	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
 
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
@@ -208,7 +164,7 @@ func TestUploadStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	store := edge.Store{
-		Client: &client,
+		Client: client,
 		URL:    storeURL,
 	}
 
@@ -238,11 +194,8 @@ func TestUpdate(t *testing.T) {
 		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		client := edge.Client{
-			ClientID:       clientID,
-			ClientSecret:   clientSecret,
-			AccessTokenURL: accessTokenURL,
-		}
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
 
 		counter := 0
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +239,7 @@ func TestUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		store := edge.Store{
-			Client: &client,
+			Client: client,
 			URL:    storeURL,
 		}
 
@@ -313,11 +266,8 @@ func TestUpdate(t *testing.T) {
 		accessTokenURL, err := url.Parse(authServer.URL)
 		require.NoError(t, err)
 
-		client := edge.Client{
-			ClientID:       clientID,
-			ClientSecret:   clientSecret,
-			AccessTokenURL: accessTokenURL,
-		}
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.URL.Path, "submissions/draft/package/operations") {
@@ -349,7 +299,7 @@ func TestUpdate(t *testing.T) {
 		require.NoError(t, err)
 
 		store := edge.Store{
-			Client: &client,
+			Client: client,
 			URL:    storeURL,
 		}
 
@@ -365,11 +315,8 @@ func TestPublishExtension(t *testing.T) {
 	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
 
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions", r.URL.Path)
@@ -387,7 +334,7 @@ func TestPublishExtension(t *testing.T) {
 	require.NoError(t, err)
 
 	store := edge.Store{
-		Client: &client,
+		Client: client,
 		URL:    storeURL,
 	}
 
@@ -414,11 +361,8 @@ func TestPublishStatus(t *testing.T) {
 	accessTokenURL, err := url.Parse(authServer.URL)
 	require.NoError(t, err)
 
-	client := edge.Client{
-		ClientID:       clientID,
-		ClientSecret:   clientSecret,
-		AccessTokenURL: accessTokenURL,
-	}
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
@@ -437,7 +381,7 @@ func TestPublishStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	store := edge.Store{
-		Client: &client,
+		Client: client,
 		URL:    storeURL,
 	}
 

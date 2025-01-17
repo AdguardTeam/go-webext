@@ -1,5 +1,14 @@
 # go-webext changelog
 
+## Unreleased
+
+### Added
+- Added support for Microsoft Edge Store API v1.1
+
+### Changed
+- Marked Microsoft Edge Store API v1.0 as deprecated (will be removed by Microsoft soon)
+- Updated documentation for Edge Store API credentials
+
 ## 0.1.3 (2024-02-28)
 
 ### Changed

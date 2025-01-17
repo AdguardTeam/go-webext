@@ -14,7 +14,7 @@ format:
 	gofumpt -w .
 
 test:
-	go test ./... -count=1
+	go test ./internal/... -count=1
 
 coverage:
-	go test ./... --coverprofile "coverage.html" && go tool cover --html "coverage.html"
+	go test ./internal/... --coverprofile "coverage.html" && go tool cover --html "coverage.html"
