@@ -3,7 +3,8 @@
 ## Unreleased
 
 ### Added
-- Added support for Microsoft Edge Store API v1.1
+- Support for Microsoft Edge Store API v1.1
+- Chrome Web Store publish options: gradual rollout, expedited review, and trusted testers target
 
 ### Changed
 - Marked Microsoft Edge Store API v1.0 as deprecated (will be removed by Microsoft soon)

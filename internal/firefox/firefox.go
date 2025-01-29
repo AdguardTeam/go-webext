@@ -320,12 +320,13 @@ func (s *Store) awaitVersionSigning(appID, versionID string) (err error) {
 		if versionDetail.File.Status == "public" {
 			log.Debug("firefox: awaitVersionSigning: extension is signed and ready: %s", appID)
 			return nil
-		} else if versionDetail.File.Status == "disabled" {
-			return fmt.Errorf("extension won't be signed automatically, version detail: %+v", versionDetail)
-		} else {
-			log.Debug("firefox: awaitVersionSigning: extension is not signed yet, retry in %s", retryInterval)
-			time.Sleep(retryInterval)
 		}
+		if versionDetail.File.Status == "disabled" {
+			return fmt.Errorf("extension won't be signed automatically, version detail: %+v", versionDetail)
+		}
+
+		log.Debug("firefox: awaitVersionSigning: extension is not signed yet, retry in %s", retryInterval)
+		time.Sleep(retryInterval)
 	}
 }
 

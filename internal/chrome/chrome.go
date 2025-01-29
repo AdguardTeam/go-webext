@@ -2,6 +2,7 @@
 package chrome
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -326,8 +327,20 @@ type PublishResponse struct {
 	StatusDetail []string `json:"statusDetail"`
 }
 
+// PublishOptions describes optional parameters for publishing.
+type PublishOptions struct {
+	// Target specifies the publish target. Can be "trustedTesters" or "default".
+	Target string `json:"target,omitempty"`
+	// DeployPercentage specifies percentage of existing users who will receive an update.
+	// Valid values are 0-100. New users always receive the latest version.
+	// Once set, this value can only be increased.
+	DeployPercentage *int `json:"deployPercentage,omitempty"`
+	// ReviewExemption if true, attempts to use expedited review process.
+	ReviewExemption bool `json:"reviewExemption,omitempty"`
+}
+
 // Publish publishes app to the store.
-func (s *Store) Publish(appID string) (result *PublishResponse, err error) {
+func (s *Store) Publish(appID string, opts *PublishOptions) (result *PublishResponse, err error) {
 	const apiPath = "chromewebstore/v1.1/items"
 	apiURL := s.URL.JoinPath(apiPath, appID, "publish").String()
 
@@ -338,12 +351,43 @@ func (s *Store) Publish(appID string) (result *PublishResponse, err error) {
 
 	client := &http.Client{Timeout: requestTimeout}
 
-	req, err := http.NewRequest(http.MethodPost, apiURL, nil)
+	var body io.Reader
+	if opts != nil {
+		jsonData, err := json.Marshal(opts)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling publish options: %w", err)
+		}
+		body = bytes.NewReader(jsonData)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, apiURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
 	req.Header.Add("Authorization", "Bearer "+accessToken)
+	if body != nil {
+		req.Header.Add("Content-Type", "application/json")
+	}
+
+	// Add query parameters if specified
+	if opts != nil {
+		q := req.URL.Query()
+		// Handle deployment percentage
+		if opts.DeployPercentage != nil {
+			if *opts.DeployPercentage < 0 || *opts.DeployPercentage > 100 {
+				return nil, fmt.Errorf("deploy percentage must be between 0 and 100, got %d", *opts.DeployPercentage)
+			}
+			q.Add("deployPercentage", fmt.Sprintf("%d", *opts.DeployPercentage))
+		}
+		if opts.Target != "" {
+			q.Add("publishTarget", opts.Target)
+		}
+		if opts.ReviewExemption {
+			q.Add("reviewExemption", "true")
+		}
+		req.URL.RawQuery = q.Encode()
+	}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -352,6 +396,9 @@ func (s *Store) Publish(appID string) (result *PublishResponse, err error) {
 	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
 
 	resultBody, err := io.ReadAll(io.LimitReader(res.Body, maxReadLimit))
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
 
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("got code %d, body: %q", res.StatusCode, resultBody)

@@ -104,7 +104,7 @@ Examples to get extension status info from the stores:
 ###### Chrome Web Store
 
 ```sh
-./go-webext status chrome --app bjefoaoblohljkadffjcpkgfamdadogp
+./go-webext status chrome -a bjefoaoblohljkadffjcpkgfamdadogp
 ```
 
 ###### Addons Mozilla Org
@@ -144,7 +144,7 @@ Examples of commands to upload new version of extension to the stores:
 ###### Chrome Web Store
 
 ```sh
-./go-webext update chrome -f ./chrome.zip -a bjefoaoblohljkaaaajcpkgfamdadogp
+./go-webext update chrome -f ./chrome.zip -a bjefoaoblohljkadffjcpkgfamdadogp
 ```
 
 ###### Microsoft Edge Addons Store
@@ -152,6 +152,33 @@ Examples of commands to upload new version of extension to the stores:
 ```sh
 ./go-webext update edge -f ./edge.zip -a 7a933b66-f8ff-4292-bc88-db593afg4bf8
 ```
+
+##### Publish:
+Examples of commands to publish extensions to the stores:
+
+###### Chrome Web Store
+
+```sh
+# Basic publish
+./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp
+
+# Publish to trusted testers
+./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -t trustedTesters
+
+# Gradual rollout to 10% of users
+./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -p 10
+
+# Request expedited review
+./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -e
+
+# Combine options (publish to trusted testers with 50% rollout and expedited review)
+./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -t trustedTesters -p 50 -e
+```
+
+Available options:
+- `-t, --target`: Publish target ("trustedTesters" or "default"). Trusted testers are specific users you designate in the Chrome Web Store Developer Dashboard who can test your extension before it's released to the general public. You'll need to add their email addresses in the Account tab under Management > Trusted Testers.
+- `-p, --percentage`: Deployment percentage (0-100) for gradual rollout. Note: Using the API to change deployment percentage currently always triggers a review, even if only the percentage is changed. This behavior may change in the future ([discussion](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/oe_1PO9dVos/m/BXtyKySBCAAJ)).
+- `-e, --expedited`: Request expedited review process
 
 ## Planned features
 

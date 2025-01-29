@@ -249,7 +249,16 @@ func TestPublish(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Contains(t, r.URL.Path, "chromewebstore/v1.1/items/"+appID+"/publish")
 		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
-		assert.Equal(t, r.Header.Get("Content-Length"), "0")
+
+		// Store query parameters in a variable
+		query := r.URL.Query()
+
+		// Test with options
+		if query.Get("deployPercentage") == "50" {
+			assert.Equal(t, "50", query.Get("deployPercentage"))
+			assert.Equal(t, "true", query.Get("reviewExemption"))
+			assert.Equal(t, "trustedTesters", query.Get("publishTarget"))
+		}
 
 		expectedJSON, err := json.Marshal(publishResponse)
 		require.NoError(t, err)
@@ -267,8 +276,19 @@ func TestPublish(t *testing.T) {
 		URL:    storeURL,
 	}
 
-	result, err := store.Publish(appID)
+	// Test without options
+	result, err := store.Publish(appID, nil)
 	require.NoError(t, err)
+	assert.Equal(t, publishResponse, *result)
 
+	// Test with options
+	p := 50 // Create a variable to get its address
+	opts := &chrome.PublishOptions{
+		Target:           "trustedTesters",
+		DeployPercentage: &p,
+		ReviewExemption:  true,
+	}
+	result, err = store.Publish(appID, opts)
+	require.NoError(t, err)
 	assert.Equal(t, publishResponse, *result)
 }

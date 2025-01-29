@@ -285,7 +285,21 @@ func chromePublishAction(c *cli.Context) error {
 
 	appID := c.String("app")
 
-	result, err := store.Publish(appID)
+	// percentage is a pointer to distinguish between unset (nil) and zero values,
+	// allowing optional deployment percentage in the API call
+	var percentage *int
+	if c.IsSet("percentage") {
+		p := c.Int("percentage")
+		percentage = &p
+	}
+
+	opts := &chrome.PublishOptions{
+		Target:           c.String("target"),
+		DeployPercentage: percentage,
+		ReviewExemption:  c.Bool("expedited"),
+	}
+
+	result, err := store.Publish(appID, opts)
 	if err != nil {
 		return fmt.Errorf("publishing extension: %w", err)
 	}
@@ -442,6 +456,21 @@ func Main() {
 			Usage: "publishes extension in the chrome store",
 			Flags: []cli.Flag{
 				appFlag,
+				&cli.StringFlag{
+					Name:    "target",
+					Aliases: []string{"t"},
+					Usage:   "publish target (trustedTesters or default)",
+				},
+				&cli.IntFlag{
+					Name:    "percentage",
+					Aliases: []string{"p"},
+					Usage:   "percentage of existing users to receive update (0-100, new users always get latest)",
+				},
+				&cli.BoolFlag{
+					Name:    "expedited",
+					Aliases: []string{"e"},
+					Usage:   "request expedited review",
+				},
 			},
 			Action: chromePublishAction,
 		}, {
