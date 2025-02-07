@@ -1,6 +1,6 @@
 # go-webext changelog
 
-## Unreleased
+## 0.2.0 (2025-02-07)
 
 ### Added
 - Support for Microsoft Edge Store API v1.1
