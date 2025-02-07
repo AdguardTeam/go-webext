@@ -5,8 +5,8 @@ plan:
   key: GOWEBEXT
   name: gowebext
 variables:
-  dockerGo: golang:1.19
-  dockerLint: golangci/golangci-lint:v1.48.0
+  dockerGo: golang:1.23.6
+  dockerLint: golangci/golangci-lint:v1.63.4
 
 stages:
   - Test:
@@ -73,6 +73,10 @@ Lint:
 
             # Fix mixed logs
             exec 2>&1
+
+            # Disable VCS stamping to prevent "error obtaining VCS status" in bamboo CI environment
+            # where full git history is not available
+            export GOFLAGS="-buildvcs=false"
 
             golangci-lint run -v
   requirements:
