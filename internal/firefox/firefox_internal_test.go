@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/urlutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,7 +69,11 @@ func TestDownloadSigned(t *testing.T) {
 		},
 	}
 
-	store := Store{API: mockAPI}
+	store := NewStore(StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
 	err := store.downloadSigned(testAppID, testVersion, expectedFilename)
 	require.NoError(t, err)
 

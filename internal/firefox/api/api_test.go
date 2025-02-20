@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/testutil"
 	"github.com/adguardteam/go-webext/internal/firefox"
 	"github.com/adguardteam/go-webext/internal/firefox/api"
@@ -77,7 +78,8 @@ func TestStatus(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	response, err := firefoxAPI.Status(appID)
@@ -117,6 +119,7 @@ func TestDownloadSignedByURL(t *testing.T) {
 		ClientSecret: clientSecret,
 		Now:          func() int64 { return testTime },
 		URL:          storeURL,
+		Logger:       slogutil.NewDiscardLogger(),
 	})
 
 	response, err := firefoxAPI.DownloadSignedByURL(storeURL.JoinPath(expectedURLPath).String())
@@ -178,7 +181,8 @@ func TestCreateUpload(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	fileData := strings.NewReader(testContent)
@@ -229,7 +233,8 @@ func TestUploadDetail(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	res, err := firefoxAPI.UploadDetail(expectedUUID)
@@ -282,7 +287,8 @@ func TestCreateAddon(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	res, err := firefoxAPI.CreateAddon(testUUID)
@@ -325,7 +331,8 @@ func TestAttachSourceToVersion(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	fileData := strings.NewReader(testContent)
@@ -375,7 +382,8 @@ func TestCreateVersion(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	versionInfo, err := firefoxAPI.CreateVersion(appID, testUUID)
@@ -417,7 +425,8 @@ func TestVersionDetail(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	versionInfo, err := firefoxAPI.VersionDetail(appID, versionID)
@@ -464,7 +473,8 @@ func TestVersionsList(t *testing.T) {
 		Now: func() int64 {
 			return testTime
 		},
-		URL: storeURL,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
 	})
 
 	versionsList, err := firefoxAPI.VersionsList(appID)

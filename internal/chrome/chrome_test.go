@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,12 +58,13 @@ func TestAuthorize(t *testing.T) {
 
 	defer server.Close()
 
-	client := chrome.Client{
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          server.URL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RefreshToken: refreshToken,
-	}
+		Logger:       slogutil.NewDiscardLogger(),
+	})
 
 	result, err := client.Authorize()
 	if err != nil {
@@ -84,12 +86,13 @@ func TestStatus(t *testing.T) {
 	authServer := createAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client := chrome.Client{
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          authServer.URL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RefreshToken: refreshToken,
-	}
+		Logger:       slogutil.NewDiscardLogger(),
+	})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, r.Method, http.MethodGet)
@@ -114,10 +117,11 @@ func TestStatus(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := chrome.Store{
-		Client: &client,
+	store := chrome.NewStore(chrome.StoreConfig{
+		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	actualStatusBytes, err := store.Status(appID)
 	require.NoError(t, err)
@@ -139,12 +143,13 @@ func TestInsert(t *testing.T) {
 	authServer := createAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client := chrome.Client{
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          authServer.URL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RefreshToken: refreshToken,
-	}
+		Logger:       slogutil.NewDiscardLogger(),
+	})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
@@ -167,10 +172,11 @@ func TestInsert(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := chrome.Store{
-		Client: &client,
+	store := chrome.NewStore(chrome.StoreConfig{
+		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	result, err := store.Insert("./testdata/test.txt")
 	require.NoError(t, err)
@@ -188,12 +194,13 @@ func TestUpdate(t *testing.T) {
 	authServer := createAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client := chrome.Client{
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          authServer.URL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RefreshToken: refreshToken,
-	}
+		Logger:       slogutil.NewDiscardLogger(),
+	})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
@@ -216,10 +223,11 @@ func TestUpdate(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := chrome.Store{
-		Client: &client,
+	store := chrome.NewStore(chrome.StoreConfig{
+		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	result, err := store.Update(appID, "testdata/test.txt")
 	require.NoError(t, err)
@@ -238,12 +246,13 @@ func TestPublish(t *testing.T) {
 	authServer := createAuthServer(t, accessToken)
 	defer authServer.Close()
 
-	client := chrome.Client{
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          authServer.URL,
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RefreshToken: refreshToken,
-	}
+		Logger:       slogutil.NewDiscardLogger(),
+	})
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
@@ -271,10 +280,11 @@ func TestPublish(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := chrome.Store{
-		Client: &client,
+	store := chrome.NewStore(chrome.StoreConfig{
+		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	// Test without options
 	result, err := store.Publish(appID, nil)

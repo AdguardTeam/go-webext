@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,10 +19,31 @@ import (
 
 // Client describes structure of a Chrome Store API client.
 type Client struct {
+	url          string
+	clientID     string
+	clientSecret string
+	refreshToken string
+	logger       *slog.Logger
+}
+
+// ClientConfig contains configuration parameters for creating a Chrome extension store instance
+type ClientConfig struct {
 	URL          string
 	ClientID     string
 	ClientSecret string
 	RefreshToken string
+	Logger       *slog.Logger
+}
+
+// NewClient creates a new Chrome extension store instance
+func NewClient(config ClientConfig) *Client {
+	return &Client{
+		url:          config.URL,
+		clientID:     config.ClientID,
+		clientSecret: config.ClientSecret,
+		refreshToken: config.RefreshToken,
+		logger:       config.Logger,
+	}
 }
 
 // TODO make configurable
@@ -36,15 +58,18 @@ type AuthorizeResponse struct {
 
 // Authorize retrieves access token.
 func (c *Client) Authorize() (accessToken string, err error) {
+	l := c.logger.With("action", "Authorize")
+	l.Debug("initiating authorization")
+
 	data := url.Values{
-		"client_id":     {c.ClientID},
-		"client_secret": {c.ClientSecret},
-		"refresh_token": {c.RefreshToken},
+		"client_id":     {c.clientID},
+		"client_secret": {c.clientSecret},
+		"refresh_token": {c.refreshToken},
 		"grant_type":    {"refresh_token"},
 		"redirect_uri":  {"urn:ietf:wg:oauth:2.0:oob"},
 	}
 
-	res, err := http.PostForm(c.URL, data)
+	res, err := http.PostForm(c.url, data)
 	if err != nil {
 		return "", fmt.Errorf("posting a form: %w", err)
 	}
@@ -67,13 +92,35 @@ func (c *Client) Authorize() (accessToken string, err error) {
 		return "", fmt.Errorf("got code %d, body: %q", res.StatusCode, body)
 	}
 
+	l.Debug(
+		"authorization completed",
+		"status", "success",
+	)
+
 	return result.AccessToken, nil
 }
 
 // Store describes structure of the store.
 type Store struct {
+	client *Client
+	url    *url.URL
+	logger *slog.Logger
+}
+
+// StoreConfig contains configuration parameters for creating a Chrome extension store instance
+type StoreConfig struct {
 	Client *Client
 	URL    *url.URL
+	Logger *slog.Logger
+}
+
+// NewStore creates a new Chrome extension store instance
+func NewStore(config StoreConfig) *Store {
+	return &Store{
+		client: config.Client,
+		url:    config.URL,
+		logger: config.Logger,
+	}
 }
 
 // StatusResponse describes status response fields.
@@ -89,10 +136,13 @@ const requestTimeout = 30 * time.Second
 
 // Status retrieves status of the extension in the store.
 func (s *Store) Status(appID string) (result []byte, err error) {
-	const apiPath = "chromewebstore/v1.1/items"
-	apiURL := s.URL.JoinPath(apiPath, appID).String()
+	l := s.logger.With("action", "Status", "app_id", appID)
+	l.Debug("retrieving extension status")
 
-	accessToken, err := s.Client.Authorize()
+	const apiPath = "chromewebstore/v1.1/items"
+	apiURL := s.url.JoinPath(apiPath, appID).String()
+
+	accessToken, err := s.client.Authorize()
 	if err != nil {
 		return nil, fmt.Errorf("getting access token: %w", err)
 	}
@@ -123,6 +173,11 @@ func (s *Store) Status(appID string) (result []byte, err error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("got code %d, body: %q", res.StatusCode, body)
 	}
+
+	l.Debug(
+		"status retrieval completed",
+		"status", "success",
+	)
 
 	return body, nil
 }
@@ -219,10 +274,13 @@ type ItemResource struct {
 
 // Insert uploads a package to create a new store item.
 func (s *Store) Insert(filePath string) (result *ItemResource, err error) {
-	const apiPath = "upload/chromewebstore/v1.1/items"
-	apiURL := s.URL.JoinPath(apiPath).String()
+	l := s.logger.With("action", "Insert", "file_path", filePath)
+	l.Debug("initiating extension upload")
 
-	accessToken, err := s.Client.Authorize()
+	const apiPath = "upload/chromewebstore/v1.1/items"
+	apiURL := s.url.JoinPath(apiPath).String()
+
+	accessToken, err := s.client.Authorize()
 	if err != nil {
 		return nil, fmt.Errorf("getting access token: %w", err)
 	}
@@ -265,15 +323,24 @@ func (s *Store) Insert(filePath string) (result *ItemResource, err error) {
 		return nil, fmt.Errorf("non success upload state received: %v, %v", result.UploadState, result.ItemError)
 	}
 
+	l.Debug(
+		"extension upload completed",
+		"status", "success",
+		"upload_id", result.ID,
+	)
+
 	return result, nil
 }
 
 // Update uploads new version of the package to the store.
 func (s *Store) Update(appID, filePath string) (result *ItemResource, err error) {
-	const apiPath = "upload/chromewebstore/v1.1/items/"
-	apiURL := s.URL.JoinPath(apiPath, appID).String()
+	l := s.logger.With("action", "Update", "app_id", appID, "file_path", filePath)
+	l.Debug("initiating extension update")
 
-	accessToken, err := s.Client.Authorize()
+	const apiPath = "upload/chromewebstore/v1.1/items/"
+	apiURL := s.url.JoinPath(apiPath, appID).String()
+
+	accessToken, err := s.client.Authorize()
 	if err != nil {
 		return nil, fmt.Errorf("getting access token: %w", err)
 	}
@@ -316,6 +383,12 @@ func (s *Store) Update(appID, filePath string) (result *ItemResource, err error)
 		return nil, fmt.Errorf("failure in response: %v", result.ItemError)
 	}
 
+	l.Debug(
+		"extension update completed",
+		"status", "success",
+		"upload_state", result.UploadState,
+	)
+
 	return result, nil
 }
 
@@ -341,10 +414,13 @@ type PublishOptions struct {
 
 // Publish publishes app to the store.
 func (s *Store) Publish(appID string, opts *PublishOptions) (result *PublishResponse, err error) {
-	const apiPath = "chromewebstore/v1.1/items"
-	apiURL := s.URL.JoinPath(apiPath, appID, "publish").String()
+	l := s.logger.With("action", "Publish", "app_id", appID, "options", opts)
+	l.Debug("initiating extension publish")
 
-	accessToken, err := s.Client.Authorize()
+	const apiPath = "chromewebstore/v1.1/items"
+	apiURL := s.url.JoinPath(apiPath, appID, "publish").String()
+
+	accessToken, err := s.client.Authorize()
 	if err != nil {
 		return nil, fmt.Errorf("getting access token: %w", err)
 	}
@@ -408,6 +484,12 @@ func (s *Store) Publish(appID string, opts *PublishOptions) (result *PublishResp
 	if err != nil {
 		return nil, fmt.Errorf("unmarshaling response body: %w", err)
 	}
+
+	l.Debug(
+		"extension publish completed",
+		"status", "success",
+		"item_id", result.ItemID,
+	)
 
 	return result, nil
 }

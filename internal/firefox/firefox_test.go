@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/firefox"
 	"github.com/stretchr/testify/require"
 )
@@ -82,7 +83,10 @@ func TestStatus(t *testing.T) {
 			return expectedStatus, nil
 		},
 	}
-	store := firefox.Store{API: mockAPI}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	actualStatus, err := store.Status(testAppID)
 	require.NoError(t, err)
@@ -137,7 +141,10 @@ func TestInsert(t *testing.T) {
 		},
 	}
 
-	store := firefox.Store{API: mockAPI}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	err := store.Insert(testFilepath, testSourcepath)
 	require.NoError(t, err)
@@ -188,7 +195,10 @@ func TestUpdate(t *testing.T) {
 			return nil
 		},
 	}
-	store := firefox.Store{API: mockAPI}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	err := store.Update(testFilepath, testSourcepath, testChannel)
 	require.NoError(t, err)
@@ -260,7 +270,10 @@ func TestSign(t *testing.T) {
 			return []*firefox.VersionInfo{}, nil
 		},
 	}
-	store := firefox.Store{API: mockAPI}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	err := store.Sign(testFilepath, testSourcepath, expectedFilename)
 	require.NoError(t, err)

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -30,7 +31,7 @@ import (
 
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/httphdr"
-	"github.com/AdguardTeam/golibs/log"
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/fileutil"
 	"github.com/adguardteam/go-webext/internal/firefox"
 	"github.com/golang-jwt/jwt/v4"
@@ -60,6 +61,7 @@ type API struct {
 	ClientSecret string       // ClientSecret is the secret used for authentication.
 	now          func() int64 // Now is a function that returns the current Unix time in seconds.
 	URL          *url.URL     // URL is the base URL for the remote API.
+	logger       *slog.Logger // Logger is the logger for the API.
 }
 
 // JoinPath joins the provided path parts with the base URL of the API.
@@ -74,6 +76,7 @@ type Config struct {
 	ClientSecret string       // ClientSecret is the secret used for authentication.
 	Now          func() int64 // Now is a function that returns the current Unix time in seconds.
 	URL          *url.URL     // URL is the base URL for the remote API.
+	Logger       *slog.Logger // Logger is the logger for the API.
 }
 
 // VersionCreateRequest describes version json structure for request to the store api.
@@ -103,6 +106,7 @@ func NewAPI(config Config) *API {
 		ClientSecret: c.ClientSecret,
 		now:          c.Now,
 		URL:          c.URL,
+		logger:       c.Logger,
 	}
 }
 
@@ -227,7 +231,8 @@ func (a *API) Status(appID string) (response *firefox.StatusResponse, err error)
 // After it is uploaded, it can be used to create new version of the extension.
 // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#upload-create
 func (a *API) CreateUpload(fileData io.Reader, channel firefox.Channel) (result *firefox.UploadDetail, err error) {
-	log.Debug("creating upload (uploading extension file for further processing)")
+	l := a.logger.With(slogutil.KeyPrefix, "CreateUpload", "channel", channel)
+	l.Debug("initiating extension upload")
 
 	// trailing slash is required
 	apiURL := a.JoinPath("upload", "/")
@@ -279,13 +284,20 @@ func (a *API) CreateUpload(fileData io.Reader, channel firefox.Channel) (result 
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", responseBody, err)
 	}
 
-	log.Debug("upload created successfully")
+	l.Debug(
+		"upload creation completed",
+		"upload", result,
+		"status", "success",
+	)
 
 	return result, nil
 }
 
 // UploadDetail retrieves upload status for the upload by id.
 func (a *API) UploadDetail(uuid string) (response *firefox.UploadDetail, err error) {
+	l := a.logger.With(slogutil.KeyPrefix, "UploadDetail", "uuid", uuid)
+	l.Debug("retrieving upload status")
+
 	apiURL := a.JoinPath("upload", uuid)
 
 	req, err := a.prepareRequest(http.MethodGet, apiURL, nil)
@@ -316,6 +328,9 @@ func (a *API) UploadDetail(uuid string) (response *firefox.UploadDetail, err err
 
 // CreateAddon creates new addon in the store.
 func (a *API) CreateAddon(UUID string) (addonInfo *firefox.AddonInfo, err error) {
+	l := a.logger.With(slogutil.KeyPrefix, "CreateAddon", "uuid", UUID)
+	l.Debug("creating new addon")
+
 	apiURL := a.JoinPath("addon", "/")
 
 	addonCreateRequest := AddonCreateRequest{
@@ -354,12 +369,21 @@ func (a *API) CreateAddon(UUID string) (addonInfo *firefox.AddonInfo, err error)
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
 	}
 
+	l.Debug(
+		"addon creation completed",
+		"addon", addonInfo,
+		"status", "success",
+	)
+
 	return addonInfo, nil
 }
 
 // CreateVersion creates new version for the extension with sourceData
 // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-create
 func (a *API) CreateVersion(appID, UUID string) (versionInfo *firefox.VersionInfo, err error) {
+	l := a.logger.With(slogutil.KeyPrefix, "CreateVersion", "appID", appID, "uuid", UUID)
+	l.Debug("creating new version")
+
 	apiURL := a.JoinPath("addon", appID, "versions", "/")
 
 	versionCreateRequest := VersionCreateRequest{
@@ -395,11 +419,20 @@ func (a *API) CreateVersion(appID, UUID string) (versionInfo *firefox.VersionInf
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
 	}
 
+	l.Debug(
+		"version creation completed",
+		"version", versionInfo,
+		"status", "success",
+	)
+
 	return versionInfo, nil
 }
 
 // VersionsList retrieves a complete list of versions for the specified extension.
 func (a *API) VersionsList(appID string) ([]*firefox.VersionInfo, error) {
+	l := a.logger.With(slogutil.KeyPrefix, "VersionsList", "appID", appID)
+	l.Debug("retrieving versions list")
+
 	var versions []*firefox.VersionInfo
 	page := 1
 	filter := "all_with_unlisted"
@@ -451,7 +484,8 @@ func (a *API) VersionsList(appID string) ([]*firefox.VersionInfo, error) {
 
 // VersionDetail returns current version details of the extension.
 func (a *API) VersionDetail(appID, versionID string) (versionInfo *firefox.VersionInfo, err error) {
-	log.Debug("api: VersionDetail: Getting version details appID: %s, versionID: %s", appID, versionID)
+	l := a.logger.With(slogutil.KeyPrefix, "VersionDetail", "appID", appID, "versionID", versionID)
+	l.Debug("retrieving version details")
 
 	apiURL := a.JoinPath("addon", appID, "versions", versionID, "/")
 
@@ -479,14 +513,22 @@ func (a *API) VersionDetail(appID, versionID string) (versionInfo *firefox.Versi
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", body, err)
 	}
 
-	log.Debug("api: VersionDetail: version details successfully retrieved: %s", body)
+	l.Debug(
+		"version details retrieved",
+		"app_id", appID,
+		"version_id", versionID,
+		"version", versionInfo,
+		"status", "success",
+	)
+
 	return versionInfo, nil
 }
 
 // AttachSourceToVersion uploads source code to the specified version.
 // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-sources
 func (a *API) AttachSourceToVersion(appID, versionID string, sourceData io.Reader) (err error) {
-	log.Debug("attaching source to appID: %s and versionID: %s", appID, versionID)
+	l := a.logger.With(slogutil.KeyPrefix, "AttachSourceToVersion", "appID", appID, "versionID", versionID)
+	l.Debug("attaching source to version")
 
 	apiURL := a.JoinPath("addon", appID, "versions", versionID, "/")
 
@@ -527,13 +569,19 @@ func (a *API) AttachSourceToVersion(appID, versionID string, sourceData io.Reade
 		return fmt.Errorf("reading response body: %w", err)
 	}
 
-	log.Debug("successfully attached, response: %s", resBody)
+	l.Debug(
+		"full source attachment response",
+		"body", resBody, // Only for debug sessions
+	)
 
 	return nil
 }
 
 // DownloadSignedByURL downloads extension by url.
 func (a *API) DownloadSignedByURL(url string) (response []byte, err error) {
+	l := a.logger.With(slogutil.KeyPrefix, "DownloadSignedByURL", "url", url)
+	l.Debug("downloading signed extension")
+
 	client := http.Client{Timeout: requestTimeout}
 
 	req, err := a.prepareRequest(http.MethodGet, url, nil)
@@ -548,6 +596,14 @@ func (a *API) DownloadSignedByURL(url string) (response []byte, err error) {
 	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
 
 	responseBody, err := readBody(res, []int{http.StatusOK})
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	l.Debug(
+		"signed extension downloaded",
+		"body", responseBody,
+	)
 
 	return responseBody, nil
 }

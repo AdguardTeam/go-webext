@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/errors"
-	"github.com/AdguardTeam/golibs/log"
 )
 
 const requestTimeout = 30 * time.Second
@@ -135,8 +135,25 @@ func (c *Client) setRequestHeaders(req *http.Request) error {
 
 // Store represents the edge store instance
 type Store struct {
+	client *Client
+	url    *url.URL
+	logger *slog.Logger
+}
+
+// StoreConfig contains configuration parameters for creating a Edge extension store instance
+type StoreConfig struct {
 	Client *Client
 	URL    *url.URL
+	Logger *slog.Logger
+}
+
+// NewStore creates a new Edge extension store instance
+func NewStore(config StoreConfig) *Store {
+	return &Store{
+		client: config.Client,
+		url:    config.URL,
+		logger: config.Logger,
+	}
 }
 
 // Status represents the status of the update or publish.
@@ -228,6 +245,8 @@ const DefaultUploadTimeout = 1 * time.Minute
 
 // Update uploads the update to the store and waits for the update to be processed.
 func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (result *UploadStatusResponse, err error) {
+	l := s.logger.With("action", "Update", "app_id", appID, "file_path", filepath)
+
 	const defaultRetryTimeout = 5 * time.Second
 	const defaultWaitStatusTimeout = 1 * time.Minute
 
@@ -260,7 +279,7 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 			return nil, fmt.Errorf("update failed due to timeout")
 		}
 
-		log.Debug("getting upload status...")
+		l.Debug("checking upload status")
 
 		status, err := s.UploadStatus(appID, operationID)
 		if err != nil {
@@ -270,7 +289,12 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 		}
 
 		if status.Status == StatusInProgress {
-			log.Debug("update is in progress, retry in: %s", updateOptions.RetryTimeout)
+			l.Debug(
+				"update status check",
+				"status", "in_progress",
+				"retry_timeout", updateOptions.RetryTimeout,
+			)
+
 			time.Sleep(updateOptions.RetryTimeout)
 
 			continue
@@ -288,9 +312,12 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 
 // UploadUpdate uploads the update to the store.
 func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result string, err error) {
+	l := s.logger.With("action", "UploadUpdate", "app_id", appID, "file_path", filePath)
+	l.Debug("uploading update")
+
 	const apiPath = "/v1/products"
 
-	apiURL := s.URL.JoinPath(apiPath, appID, "submissions/draft/package").String()
+	apiURL := s.url.JoinPath(apiPath, appID, "submissions/draft/package").String()
 
 	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
@@ -299,7 +326,11 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 	defer func() {
 		err := errors.WithDeferred(err, file.Close())
 		if err != nil {
-			log.Debug("[UploadUpdate] failed to close file: %q due to error: %s", filePath, err)
+			l.Warn(
+				"failed to close file",
+				"file_path", filePath,
+				"error", err,
+			)
 		}
 	}()
 
@@ -308,7 +339,7 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	err = s.Client.setRequestHeaders(req)
+	err = s.client.setRequestHeaders(req)
 	if err != nil {
 		return "", err
 	}
@@ -338,15 +369,18 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 
 // UploadStatus returns the status of the upload.
 func (s Store) UploadStatus(appID, operationID string) (response *UploadStatusResponse, err error) {
+	l := s.logger.With("action", "UploadStatus", "app_id", appID, "operation_id", operationID)
+	l.Debug("getting upload status")
+
 	apiPath := "v1/products"
-	apiURL := s.URL.JoinPath(apiPath, appID, "submissions/draft/package/operations", operationID).String()
+	apiURL := s.url.JoinPath(apiPath, appID, "submissions/draft/package/operations", operationID).String()
 
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	err = s.Client.setRequestHeaders(req)
+	err = s.client.setRequestHeaders(req)
 	if err != nil {
 		return nil, err
 	}
@@ -376,8 +410,11 @@ func (s Store) UploadStatus(appID, operationID string) (response *UploadStatusRe
 
 // PublishExtension publishes the extension to the store and returns operationID.
 func (s Store) PublishExtension(appID string) (result string, err error) {
+	l := s.logger.With("action", "PublishExtension", "app_id", appID)
+	l.Debug("publishing extension")
+
 	apiPath := "/v1/products/"
-	apiURL := s.URL.JoinPath(apiPath, appID, "submissions").String()
+	apiURL := s.url.JoinPath(apiPath, appID, "submissions").String()
 
 	// TODO (maximtop): consider adding body to the request with notes for reviewers.
 	req, err := http.NewRequest(http.MethodPost, apiURL, nil)
@@ -385,7 +422,7 @@ func (s Store) PublishExtension(appID string) (result string, err error) {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	err = s.Client.setRequestHeaders(req)
+	err = s.client.setRequestHeaders(req)
 	if err != nil {
 		return "", err
 	}
@@ -424,15 +461,18 @@ type PublishStatusResponse struct {
 
 // PublishStatus returns the status of the extension publish.
 func (s Store) PublishStatus(appID, operationID string) (response *PublishStatusResponse, err error) {
+	l := s.logger.With("action", "PublishStatus", "app_id", appID, "operation_id", operationID)
+	l.Debug("getting publish status")
+
 	apiPath := "v1/products/"
-	apiURL := s.URL.JoinPath(apiPath, appID, "submissions/operations", operationID).String()
+	apiURL := s.url.JoinPath(apiPath, appID, "submissions/operations", operationID).String()
 
 	req, err := http.NewRequest(http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	err = s.Client.setRequestHeaders(req)
+	err = s.client.setRequestHeaders(req)
 	if err != nil {
 		return nil, err
 	}
@@ -469,6 +509,9 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 
 // Publish publishes the extension to the store.
 func (s Store) Publish(appID string) (response *PublishStatusResponse, err error) {
+	l := s.logger.With("action", "Publish", "app_id", appID)
+	l.Debug("publishing extension")
+
 	operationID, err := s.PublishExtension(appID)
 	if err != nil {
 		return nil, fmt.Errorf("publishing extension with appID: %s, error: %w", appID, err)

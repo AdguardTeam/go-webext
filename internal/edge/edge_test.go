@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,10 +79,11 @@ func TestUploadUpdate(t *testing.T) {
 		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
 
-		store := edge.Store{
+		store := edge.NewStore(edge.StoreConfig{
 			Client: client,
 			URL:    storeURL,
-		}
+			Logger: slogutil.NewDiscardLogger(),
+		})
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -115,10 +117,11 @@ func TestUploadUpdate(t *testing.T) {
 		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
 
-		store := edge.Store{
+		store := edge.NewStore(edge.StoreConfig{
 			Client: client,
 			URL:    storeURL,
-		}
+			Logger: slogutil.NewDiscardLogger(),
+		})
 
 		ctx, cancel := context.WithTimeout(context.Background(), contextTimeoutDuration)
 		defer cancel()
@@ -163,10 +166,11 @@ func TestUploadStatus(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := edge.Store{
+	store := edge.NewStore(edge.StoreConfig{
 		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	uploadStatus, err := store.UploadStatus(appID, operationID)
 	require.NoError(t, err)
@@ -238,10 +242,11 @@ func TestUpdate(t *testing.T) {
 		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
 
-		store := edge.Store{
+		store := edge.NewStore(edge.StoreConfig{
 			Client: client,
 			URL:    storeURL,
-		}
+			Logger: slogutil.NewDiscardLogger(),
+		})
 
 		response, err := store.Update(
 			appID,
@@ -298,10 +303,11 @@ func TestUpdate(t *testing.T) {
 		storeURL, err := url.Parse(storeServer.URL)
 		require.NoError(t, err)
 
-		store := edge.Store{
+		store := edge.NewStore(edge.StoreConfig{
 			Client: client,
 			URL:    storeURL,
-		}
+			Logger: slogutil.NewDiscardLogger(),
+		})
 
 		_, err = store.Update(appID, filepath, updateOptions)
 		assert.ErrorContains(t, err, "update failed due to timeout")
@@ -333,10 +339,11 @@ func TestPublishExtension(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := edge.Store{
+	store := edge.NewStore(edge.StoreConfig{
 		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	response, err := store.PublishExtension(appID)
 	require.NoError(t, err)
@@ -380,10 +387,11 @@ func TestPublishStatus(t *testing.T) {
 	storeURL, err := url.Parse(storeServer.URL)
 	require.NoError(t, err)
 
-	store := edge.Store{
+	store := edge.NewStore(edge.StoreConfig{
 		Client: client,
 		URL:    storeURL,
-	}
+		Logger: slogutil.NewDiscardLogger(),
+	})
 
 	response, err := store.PublishStatus(appID, operationID)
 	require.NoError(t, err)

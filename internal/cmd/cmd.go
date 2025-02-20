@@ -3,11 +3,12 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"time"
 
-	"github.com/AdguardTeam/golibs/log"
+	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/adguardteam/go-webext/internal/firefox"
@@ -29,22 +30,25 @@ func getChromeStore() (*chrome.Store, error) {
 		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
 	}
 
-	client := chrome.Client{
+	chromeLogger := slog.Default().With(slogutil.KeyPrefix, "chrome")
+	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          "https://accounts.google.com/o/oauth2/token",
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
 		RefreshToken: cfg.RefreshToken,
-	}
+		Logger:       chromeLogger,
+	})
 
-	store := chrome.Store{
-		Client: &client,
+	store := chrome.NewStore(chrome.StoreConfig{
+		Client: client,
 		URL: &url.URL{
 			Scheme: "https",
 			Host:   "www.googleapis.com",
 		},
-	}
+		Logger: chromeLogger,
+	})
 
-	return &store, nil
+	return store, nil
 }
 
 func getFirefoxStore() (*firefox.Store, error) {
@@ -70,9 +74,13 @@ func getFirefoxStore() (*firefox.Store, error) {
 			Scheme: "https",
 			Host:   cfg.BaseURL,
 		},
+		Logger: slog.Default().With(slogutil.KeyPrefix, "firefox/api"),
 	})
 
-	store := &firefox.Store{API: firefoxAPI}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    firefoxAPI,
+		Logger: slog.Default().With(slogutil.KeyPrefix, "firefox"),
+	})
 
 	return store, nil
 }
@@ -114,15 +122,16 @@ func getEdgeStore() (*edge.Store, error) {
 
 	client := edge.NewClient(clientConfig)
 
-	store := edge.Store{
+	store := edge.NewStore(edge.StoreConfig{
 		Client: client,
 		URL: &url.URL{
 			Scheme: "https",
 			Host:   "api.addons.microsoftedge.microsoft.com",
 		},
-	}
+		Logger: slog.Default().With(slogutil.KeyPrefix, "edge"),
+	})
 
-	return &store, nil
+	return store, nil
 }
 
 func firefoxStatusAction(c *cli.Context) error {
@@ -357,9 +366,18 @@ func Main() {
 		Usage: "CLI app for managing extensions in the stores",
 		Before: func(ctx *cli.Context) error {
 			verbose := ctx.Bool("verbose")
+			logLevel := slog.LevelInfo
 			if verbose {
-				log.SetLevel(log.DEBUG)
+				logLevel = slog.LevelDebug
 			}
+
+			handler := slogutil.New(&slogutil.Config{
+				Level:        logLevel,
+				AddTimestamp: true,
+				Format:       slogutil.FormatText, // or FormatJSON if needed
+			})
+			slog.SetDefault(handler)
+
 			return nil
 		},
 	}
@@ -503,6 +521,10 @@ func Main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatalf("error occurred: %s", err)
+		slog.Error(
+			"fatal error occurred",
+			"error", err,
+		)
+		os.Exit(1)
 	}
 }
