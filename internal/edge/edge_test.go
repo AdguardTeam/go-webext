@@ -327,7 +327,7 @@ func TestPublishExtension(t *testing.T) {
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions", r.URL.Path)
-		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
 		w.Header().Set(httphdr.Location, operationID)
@@ -374,7 +374,7 @@ func TestPublishStatus(t *testing.T) {
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
-		assert.Equal(t, "GET", r.Method)
+		assert.Equal(t, http.MethodGet, r.Method)
 		assert.Equal(t, "Bearer "+accessToken, r.Header.Get(httphdr.Authorization))
 
 		response, err := json.Marshal(statusResponse)
