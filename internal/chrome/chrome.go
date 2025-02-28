@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/adguardteam/go-webext/internal/fileutil"
 )
 
@@ -156,7 +157,7 @@ func (s *Store) Status(appID string) (result []byte, err error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add(httphdr.Authorization, "Bearer "+accessToken)
 	q := req.URL.Query()
 	q.Add("projection", "DRAFT")
 	req.URL.RawQuery = q.Encode()
@@ -297,7 +298,7 @@ func (s *Store) Insert(filePath string) (result *ItemResource, err error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add(httphdr.Authorization, "Bearer "+accessToken)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -357,7 +358,7 @@ func (s *Store) Update(appID, filePath string) (result *ItemResource, err error)
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add(httphdr.Authorization, "Bearer "+accessToken)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -441,9 +442,9 @@ func (s *Store) Publish(appID string, opts *PublishOptions) (result *PublishResp
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add(httphdr.Authorization, "Bearer "+accessToken)
 	if body != nil {
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add(httphdr.ContentType, "application/json")
 	}
 
 	// Add query parameters if specified

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/testutil"
 	"github.com/adguardteam/go-webext/internal/firefox"
@@ -51,7 +52,7 @@ func TestStatus(t *testing.T) {
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
 
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		w.WriteHeader(http.StatusOK)
 
@@ -102,7 +103,7 @@ func TestDownloadSignedByURL(t *testing.T) {
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
 
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		w.WriteHeader(http.StatusOK)
 
@@ -147,7 +148,7 @@ func TestCreateUpload(t *testing.T) {
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
 
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		// assert that has field channel in request
 		assert.Equal(t, r.FormValue("channel"), "listed")
@@ -214,7 +215,7 @@ func TestUploadDetail(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		expectedResponse, err := json.Marshal(expectedUploadDetail)
 		require.NoError(pt, err)
@@ -257,7 +258,7 @@ func TestCreateAddon(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		// read body
 		body, err := io.ReadAll(r.Body)
@@ -305,7 +306,7 @@ func TestAttachSourceToVersion(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		// assert that has file in request body
 		file, header, err := r.FormFile("source")
@@ -352,7 +353,7 @@ func TestCreateVersion(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(pt, err)
@@ -404,7 +405,7 @@ func TestVersionDetail(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		response, err := json.Marshal(expectedVersionInfo)
 		require.NoError(pt, err)
@@ -447,7 +448,7 @@ func TestVersionsList(t *testing.T) {
 
 		authHeader, err := api.AuthHeader(clientID, clientSecret, testTime)
 		require.NoError(pt, err)
-		assert.Equal(t, r.Header.Get("Authorization"), authHeader)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), authHeader)
 
 		response, err := json.Marshal(firefox.VersionsListResponse{
 			Count: 1,

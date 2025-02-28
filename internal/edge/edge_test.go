@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/stretchr/testify/assert"
@@ -60,8 +61,8 @@ func TestUploadUpdate(t *testing.T) {
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodPost, r.Method)
-			assert.Equal(t, "Bearer "+accessToken, r.Header.Get("Authorization"))
-			assert.Equal(t, "application/zip", r.Header.Get("Content-Type"))
+			assert.Equal(t, "Bearer "+accessToken, r.Header.Get(httphdr.Authorization))
+			assert.Equal(t, "application/zip", r.Header.Get(httphdr.ContentType))
 			assert.Equal(t, path.Join("/v1/products", appID, "submissions/draft/package"), r.URL.Path)
 
 			responseBody, err := io.ReadAll(r.Body)
@@ -69,7 +70,7 @@ func TestUploadUpdate(t *testing.T) {
 
 			assert.Equal(t, "test_file_content", string(responseBody))
 
-			w.Header().Set("Location", operationID)
+			w.Header().Set(httphdr.Location, operationID)
 			w.WriteHeader(http.StatusAccepted)
 
 			_, err = w.Write(nil)
@@ -152,7 +153,7 @@ func TestUploadStatus(t *testing.T) {
 	client := edge.NewClient(clientConfig)
 
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 		assert.Equal(t, r.URL.Path, "/v1/products/"+appID+"/submissions/draft/package/operations/"+operationID)
 
 		response, err := json.Marshal(response)
@@ -231,7 +232,7 @@ func TestUpdate(t *testing.T) {
 				return
 			}
 
-			w.Header().Set("Location", operationID)
+			w.Header().Set(httphdr.Location, operationID)
 			w.WriteHeader(http.StatusAccepted)
 
 			_, err := w.Write(nil)
@@ -292,7 +293,7 @@ func TestUpdate(t *testing.T) {
 				return
 			}
 
-			w.Header().Set("Location", operationID)
+			w.Header().Set(httphdr.Location, operationID)
 			w.WriteHeader(http.StatusAccepted)
 
 			_, err := w.Write(nil)
@@ -327,9 +328,9 @@ func TestPublishExtension(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions", r.URL.Path)
 		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
-		w.Header().Set("Location", operationID)
+		w.Header().Set(httphdr.Location, operationID)
 		w.WriteHeader(http.StatusAccepted)
 		_, err := w.Write([]byte(nil))
 		require.NoError(t, err)
@@ -374,7 +375,7 @@ func TestPublishStatus(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "Bearer "+accessToken, r.Header.Get("Authorization"))
+		assert.Equal(t, "Bearer "+accessToken, r.Header.Get(httphdr.Authorization))
 
 		response, err := json.Marshal(statusResponse)
 		require.NoError(t, err)

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func TestStatus(t *testing.T) {
 		assert.Equal(t, r.Method, http.MethodGet)
 		assert.Contains(t, r.URL.Path, "chromewebstore/v1.1/items/"+appID)
 		assert.Equal(t, r.URL.Query().Get("projection"), "DRAFT")
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
 		expectedJSON, err := json.Marshal(map[string]string{
 			"kind":        status.Kind,
@@ -154,7 +155,7 @@ func TestInsert(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Contains(t, r.URL.Path, "upload/chromewebstore/v1.1/items")
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -205,7 +206,7 @@ func TestUpdate(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)
 		assert.Contains(t, r.URL.Path, "upload/chromewebstore/v1.1/items/"+appID)
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -257,7 +258,7 @@ func TestPublish(t *testing.T) {
 	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Contains(t, r.URL.Path, "chromewebstore/v1.1/items/"+appID+"/publish")
-		assert.Equal(t, r.Header.Get("Authorization"), "Bearer "+accessToken)
+		assert.Equal(t, r.Header.Get(httphdr.Authorization), "Bearer "+accessToken)
 
 		// Store query parameters in a variable
 		query := r.URL.Query()

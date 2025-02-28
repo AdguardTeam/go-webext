@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 )
 
 const requestTimeout = 30 * time.Second
@@ -68,7 +69,7 @@ func (c *V1Config) SetRequestHeaders(req *http.Request) error {
 	if err != nil {
 		return fmt.Errorf("authorizing: %w", err)
 	}
-	req.Header.Add("Authorization", "Bearer "+accessToken)
+	req.Header.Add(httphdr.Authorization, "Bearer "+accessToken)
 	return nil
 }
 
@@ -86,7 +87,7 @@ func (c *V1Config) authorize() (string, error) {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add(httphdr.ContentType, "application/x-www-form-urlencoded")
 
 	client := http.Client{Timeout: requestTimeout}
 
@@ -113,7 +114,7 @@ func (c *V1Config) authorize() (string, error) {
 
 // SetRequestHeaders sets the authorization headers for the request using v1.1 API configuration.
 func (c *V1_1Config) SetRequestHeaders(req *http.Request) error {
-	req.Header.Add("Authorization", "ApiKey "+c.apiKey)
+	req.Header.Add(httphdr.Authorization, "ApiKey "+c.apiKey)
 	req.Header.Add("X-ClientID", c.clientID)
 	return nil
 }
@@ -344,7 +345,7 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 		return "", err
 	}
 
-	req.Header.Add("Content-Type", "application/zip")
+	req.Header.Add(httphdr.ContentType, "application/zip")
 
 	client := http.Client{}
 
@@ -358,7 +359,7 @@ func (s Store) UploadUpdate(ctx context.Context, appID, filePath string) (result
 		return "", fmt.Errorf("unexpected status code %s", res.Status)
 	}
 
-	operationID := res.Header.Get("Location")
+	operationID := res.Header.Get(httphdr.Location)
 
 	if operationID == "" {
 		return "", fmt.Errorf("empty operation ID")
@@ -439,7 +440,7 @@ func (s Store) PublishExtension(appID string) (result string, err error) {
 		return "", fmt.Errorf("unexpected status code %s", res.Status)
 	}
 
-	operationID := res.Header.Get("Location")
+	operationID := res.Header.Get(httphdr.Location)
 
 	if operationID == "" {
 		return "", fmt.Errorf("empty operation ID")

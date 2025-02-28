@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AdguardTeam/golibs/errors"
+	"github.com/AdguardTeam/golibs/httphdr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func TestAuthorize(t *testing.T) {
 
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		assert.Equal(t, req.Method, http.MethodPost)
-		assert.Equal(t, req.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
+		assert.Equal(t, req.Header.Get(httphdr.ContentType), "application/x-www-form-urlencoded")
 		assert.Equal(t, req.FormValue("client_id"), clientID)
 		assert.Equal(t, req.FormValue("scope"), "https://api.addons.microsoftedge.microsoft.com/.default")
 		assert.Equal(t, req.FormValue("client_secret"), clientSecret)
@@ -49,5 +50,5 @@ func TestAuthorize(t *testing.T) {
 	err = client.setRequestHeaders(req)
 	require.NoError(t, err)
 
-	assert.Equal(t, "Bearer "+accessToken, req.Header.Get("Authorization"))
+	assert.Equal(t, "Bearer "+accessToken, req.Header.Get(httphdr.Authorization))
 }
