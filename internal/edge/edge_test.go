@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/stretchr/testify/assert"
@@ -109,8 +110,7 @@ func TestUploadUpdate(t *testing.T) {
 
 		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(serverResponseDuration)
-			_, err = w.Write(nil)
-			require.NoError(t, err)
+			_ = errors.Must(w.Write(nil))
 		}))
 		defer storeServer.Close()
 

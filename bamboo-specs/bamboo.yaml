@@ -44,7 +44,7 @@ Test:
             # Fix mixed logs
             exec 2>&1
 
-            go test ./...
+            go test -race ./...
   final-tasks:
     - clean
   requirements:

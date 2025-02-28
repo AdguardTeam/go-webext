@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/AdguardTeam/golibs/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,15 +27,13 @@ func TestAuthorize(t *testing.T) {
 		assert.Equal(t, req.FormValue("client_secret"), clientSecret)
 		assert.Equal(t, req.FormValue("grant_type"), "client_credentials")
 
-		response, err := json.Marshal(AuthorizeResponse{
+		response := errors.Must(json.Marshal(AuthorizeResponse{
 			TokenType:   "",
 			ExpiresIn:   0,
 			AccessToken: accessToken,
-		})
-		require.NoError(t, err)
+		}))
 
-		_, err = w.Write(response)
-		require.NoError(t, err)
+		_ = errors.Must(w.Write(response))
 	}))
 	defer authServer.Close()
 
