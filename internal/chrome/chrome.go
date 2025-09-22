@@ -135,6 +135,9 @@ type StatusResponse struct {
 
 const requestTimeout = 30 * time.Second
 
+// Extended request timeout for waiting skip review check during publish.
+const extendedRequestTimeout = 120 * time.Second
+
 // Status retrieves status of the extension in the store.
 func (s *Store) Status(appID string) (result []byte, err error) {
 	l := s.logger.With("action", "Status", "app_id", appID)
@@ -426,7 +429,7 @@ func (s *Store) Publish(appID string, opts *PublishOptions) (result *PublishResp
 		return nil, fmt.Errorf("getting access token: %w", err)
 	}
 
-	client := &http.Client{Timeout: requestTimeout}
+	client := &http.Client{Timeout: extendedRequestTimeout}
 
 	var body io.Reader
 	if opts != nil {
