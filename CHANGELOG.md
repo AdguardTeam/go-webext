@@ -1,5 +1,11 @@
 # go-webext changelog
 
+## 0.2.1 (2025-09-22)
+
+### Changed
+- Timeout for Chrome Web Store API requests for `publish` command increased
+  to 120 seconds to handle skip review check.
+
 ## 0.2.0 (2025-02-07)
 
 ### Added
