@@ -47,8 +47,9 @@ Test:
             go test -race ./...
   final-tasks:
     - clean
-  requirements:
+  requirements: &requirements
     - adg-docker: 'true'
+    - extension: 'true'
 
 Lint:
   docker:
@@ -79,8 +80,7 @@ Lint:
             export GOFLAGS="-buildvcs=false"
 
             golangci-lint run -v
-  requirements:
-    - adg-docker: 'true'
+  requirements: *requirements
 
 branches:
   create: for-pull-request
