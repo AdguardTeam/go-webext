@@ -1,5 +1,11 @@
 # go-webext changelog
 
+## 0.3.0 (2025-12-12)
+
+### Added
+- Chrome Web Store v2 API support
+- `CHROME_API_VERSION` environment variable to configure API version(defaults to v1)
+
 ## 0.2.1 (2025-09-22)
 
 ### Changed

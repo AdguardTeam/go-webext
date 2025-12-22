@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
+	"github.com/AdguardTeam/golibs/validate"
 	"github.com/adguardteam/go-webext/internal/chrome"
 	"github.com/adguardteam/go-webext/internal/edge"
 	"github.com/adguardteam/go-webext/internal/firefox"
@@ -18,19 +19,35 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func getChromeStore() (*chrome.Store, error) {
-	type config struct {
-		ClientID     string `env:"CHROME_CLIENT_ID,notEmpty"`
-		ClientSecret string `env:"CHROME_CLIENT_SECRET,notEmpty"`
-		RefreshToken string `env:"CHROME_REFRESH_TOKEN,notEmpty"`
-	}
+const (
+	chromeAPIVersionV1 = "v1"
+	chromeAPIVersionV2 = "v2"
+)
 
-	cfg := config{}
-	if err := env.Parse(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
+type chromeConfig struct {
+	ClientID     string `env:"CHROME_CLIENT_ID,notEmpty"`
+	ClientSecret string `env:"CHROME_CLIENT_SECRET,notEmpty"`
+	RefreshToken string `env:"CHROME_REFRESH_TOKEN,notEmpty"`
+	PublisherID  string `env:"CHROME_PUBLISHER_ID"` // Required only for v2
+	APIVersion   string `env:"CHROME_API_VERSION" envDefault:"v1"`
+}
+
+func newChromeConfig() (*chromeConfig, error) {
+	cfg := &chromeConfig{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse Chrome environment variables: %w", err)
+	}
+	return cfg, nil
+}
+
+func getChromeV1Store() (*chrome.StoreV1, error) {
+	cfg, err := newChromeConfig()
+	if err != nil {
+		return nil, err
 	}
 
 	chromeLogger := slog.Default().With(slogutil.KeyPrefix, "chrome")
+
 	client := chrome.NewClient(chrome.ClientConfig{
 		URL:          "https://accounts.google.com/o/oauth2/token",
 		ClientID:     cfg.ClientID,
@@ -39,7 +56,7 @@ func getChromeStore() (*chrome.Store, error) {
 		Logger:       chromeLogger,
 	})
 
-	store := chrome.NewStore(chrome.StoreConfig{
+	store := chrome.NewStoreV1(chrome.StoreV1Config{
 		Client: client,
 		URL: &url.URL{
 			Scheme: "https",
@@ -49,6 +66,73 @@ func getChromeStore() (*chrome.Store, error) {
 	})
 
 	return store, nil
+}
+
+func getChromeV2Store() (*chrome.StoreV2, error) {
+	cfg, err := newChromeConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validate.NotEmpty("CHROME_PUBLISHER_ID", cfg.PublisherID); err != nil {
+		return nil, err
+	}
+
+	chromeLogger := slog.Default().With(slogutil.KeyPrefix, "chrome")
+
+	client := chrome.NewClient(chrome.ClientConfig{
+		URL:          "https://accounts.google.com/o/oauth2/token",
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		RefreshToken: cfg.RefreshToken,
+		Logger:       chromeLogger,
+	})
+
+	store := chrome.NewStoreV2(chrome.StoreV2Config{
+		Client: client,
+		URL: &url.URL{
+			Scheme: "https",
+			Host:   "chromewebstore.googleapis.com",
+		},
+		PublisherID: cfg.PublisherID,
+		Logger:      chromeLogger,
+	})
+
+	return store, nil
+}
+
+// chromeStore holds either a V1 or V2 store based on API version.
+type chromeStore struct {
+	v1         *chrome.StoreV1
+	v2         *chrome.StoreV2
+	apiVersion string
+}
+
+// getChromeStore returns a chrome store supporting the configured API version.
+func getChromeStore() (*chromeStore, error) {
+	cfg, err := newChromeConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	apiVersion := cfg.APIVersion
+
+	switch apiVersion {
+	case chromeAPIVersionV1:
+		store, err := getChromeV1Store()
+		if err != nil {
+			return nil, fmt.Errorf("initializing chrome store v1: %w", err)
+		}
+		return &chromeStore{v1: store, apiVersion: apiVersion}, nil
+	case chromeAPIVersionV2:
+		store, err := getChromeV2Store()
+		if err != nil {
+			return nil, fmt.Errorf("initializing chrome store v2: %w", err)
+		}
+		return &chromeStore{v2: store, apiVersion: apiVersion}, nil
+	default:
+		return nil, fmt.Errorf("invalid CHROME_API_VERSION: %s (must be %s or %s)", apiVersion, chromeAPIVersionV1, chromeAPIVersionV2)
+	}
 }
 
 func getFirefoxStore() (*firefox.Store, error) {
@@ -103,8 +187,11 @@ func getEdgeStore() (*edge.Store, error) {
 	var clientConfig edge.ClientConfig
 
 	if cfg.APIVersion == edge.APIVersionV1 {
-		if cfg.ClientSecret == "" || cfg.AccessTokenURL == "" {
-			return nil, fmt.Errorf("EDGE_CLIENT_SECRET and EDGE_ACCESS_TOKEN_URL are required for v1")
+		if err := validate.NotEmpty("EDGE_CLIENT_SECRET", cfg.ClientSecret); err != nil {
+			return nil, err
+		}
+		if err := validate.NotEmpty("EDGE_ACCESS_TOKEN_URL", cfg.AccessTokenURL); err != nil {
+			return nil, err
 		}
 		accessTokenURL, err := url.Parse(cfg.AccessTokenURL)
 		if err != nil {
@@ -112,8 +199,8 @@ func getEdgeStore() (*edge.Store, error) {
 		}
 		clientConfig = edge.NewV1Config(cfg.ClientID, cfg.ClientSecret, accessTokenURL)
 	} else if cfg.APIVersion == edge.APIVersionV1_1 {
-		if cfg.APIKey == "" {
-			return nil, fmt.Errorf("EDGE_API_KEY is required for v1.1")
+		if err := validate.NotEmpty("EDGE_API_KEY", cfg.APIKey); err != nil {
+			return nil, err
 		}
 		clientConfig = edge.NewV1_1Config(cfg.ClientID, cfg.APIKey)
 	} else {
@@ -155,22 +242,47 @@ func firefoxStatusAction(c *cli.Context) error {
 func chromeStatusAction(c *cli.Context) error {
 	store, err := getChromeStore()
 	if err != nil {
-		return fmt.Errorf("initializing chrome store: %w", err)
+		return err
 	}
 
 	appID := c.String("app")
-	status, err := store.Status(appID)
-	if err != nil {
-		return fmt.Errorf("getting status from chrome store: %w", err)
-	}
 
-	fmt.Printf("%s\n", status)
+	switch store.apiVersion {
+	case chromeAPIVersionV1:
+		status, err := store.v1.Status(appID)
+		if err != nil {
+			return fmt.Errorf("getting status: %w", err)
+		}
+
+		fmt.Printf("Item ID: %s\n", status.ID)
+		fmt.Printf("Upload State: %s\n", status.UploadStateV1)
+		if status.CrxVersion != "" {
+			fmt.Printf("Version: %s\n", status.CrxVersion)
+		}
+	case chromeAPIVersionV2:
+		status, err := store.v2.Status(appID)
+		if err != nil {
+			return fmt.Errorf("getting status: %w", err)
+		}
+
+		fmt.Printf("Item ID: %s\n", status.ItemID)
+		if status.PublishedItemRevisionStatus != nil {
+			fmt.Printf("Published State: %s\n", status.PublishedItemRevisionStatus.State.String())
+			if len(status.PublishedItemRevisionStatus.DistributionChannels) > 0 {
+				fmt.Printf("Published Version: %s\n", status.PublishedItemRevisionStatus.DistributionChannels[0].CrxVersion)
+				fmt.Printf("Rollout: %d%%\n", status.PublishedItemRevisionStatus.DistributionChannels[0].DeployPercentage)
+			}
+		}
+		if status.SubmittedItemRevisionStatus != nil {
+			fmt.Printf("Submitted State: %s\n", status.SubmittedItemRevisionStatus.State.String())
+		}
+	}
 
 	return nil
 }
 
 func chromeInsertAction(c *cli.Context) error {
-	store, err := getChromeStore()
+	store, err := getChromeV1Store()
 	if err != nil {
 		return fmt.Errorf("initializing chrome store: %w", err)
 	}
@@ -182,7 +294,43 @@ func chromeInsertAction(c *cli.Context) error {
 		return fmt.Errorf("inserting extension: %w", err)
 	}
 
-	fmt.Println(result)
+	fmt.Println("Insert completed")
+	fmt.Printf("Item ID: %s\n", result.ID)
+	fmt.Printf("Upload State: %s\n", result.UploadStateV1)
+
+	return nil
+}
+
+func chromeUpdateAction(c *cli.Context) error {
+	store, err := getChromeStore()
+	if err != nil {
+		return err
+	}
+
+	filepath := c.String("file")
+	appID := c.String("app")
+
+	switch store.apiVersion {
+	case chromeAPIVersionV1:
+		result, err := store.v1.Update(appID, filepath)
+		if err != nil {
+			return fmt.Errorf("updating extension: %w", err)
+		}
+
+		fmt.Println("Update completed")
+		fmt.Printf("Item ID: %s\n", result.ID)
+		fmt.Printf("Upload State: %s\n", result.UploadStateV1)
+	case chromeAPIVersionV2:
+		result, err := store.v2.Upload(appID, filepath)
+		if err != nil {
+			return fmt.Errorf("uploading extension: %w", err)
+		}
+
+		fmt.Println("Upload completed")
+		fmt.Printf("Item ID: %s\n", result.ItemID)
+		fmt.Printf("Version: %s\n", result.CrxVersion)
+		fmt.Printf("Upload State: %s\n", result.UploadStateV2)
+	}
 
 	return nil
 }
@@ -218,25 +366,6 @@ func firefoxInsertAction(c *cli.Context) error {
 	}
 
 	fmt.Println("extension inserted")
-
-	return nil
-}
-
-func chromeUpdateAction(c *cli.Context) error {
-	store, err := getChromeStore()
-	if err != nil {
-		return fmt.Errorf("initializing chrome store: %w", err)
-	}
-
-	filepath := c.String("file")
-	appID := c.String("app")
-
-	result, err := store.Update(appID, filepath)
-	if err != nil {
-		return fmt.Errorf("updating extension: %w", err)
-	}
-
-	fmt.Printf("updated: %v", result)
 
 	return nil
 }
@@ -289,31 +418,62 @@ func edgeUpdateAction(c *cli.Context) error {
 func chromePublishAction(c *cli.Context) error {
 	store, err := getChromeStore()
 	if err != nil {
-		return fmt.Errorf("initializing chrome store: %w", err)
+		return err
 	}
 
 	appID := c.String("app")
 
-	// percentage is a pointer to distinguish between unset (nil) and zero values,
-	// allowing optional deployment percentage in the API call
-	var percentage *int
-	if c.IsSet("percentage") {
-		p := c.Int("percentage")
-		percentage = &p
-	}
+	switch store.apiVersion {
+	case chromeAPIVersionV1:
+		opts := &chrome.PublishOptionsV1{}
 
-	opts := &chrome.PublishOptions{
-		Target:           c.String("target"),
-		DeployPercentage: percentage,
-		ReviewExemption:  c.Bool("expedited"),
-	}
+		target := c.String("target")
+		if target == "trustedTesters" {
+			opts.Target = "trustedTesters"
+		}
 
-	result, err := store.Publish(appID, opts)
-	if err != nil {
-		return fmt.Errorf("publishing extension: %w", err)
-	}
+		if c.IsSet("percentage") {
+			p := c.Int("percentage")
+			opts.DeployPercentage = &p
+		}
 
-	fmt.Println(result)
+		opts.ReviewExemption = c.Bool("expedited")
+
+		result, err := store.v1.Publish(appID, opts)
+		if err != nil {
+			return fmt.Errorf("publishing extension: %w", err)
+		}
+
+		fmt.Println("Publish operation completed")
+		fmt.Printf("Item ID: %s\n", result.ItemID)
+		if len(result.Status) > 0 {
+			fmt.Printf("Status: %v\n", result.Status)
+		}
+	case chromeAPIVersionV2:
+		opts := &chrome.PublishOptions{
+			PublishType: chrome.PublishTypeDefault,
+		}
+
+		if c.Bool("staged") {
+			opts.PublishType = chrome.PublishTypeStaged
+		}
+
+		if c.IsSet("percentage") {
+			p := c.Int("percentage")
+			opts.DeployInfos = []chrome.DeployInfo{{DeployPercentage: p}}
+		}
+
+		opts.SkipReview = c.Bool("expedited")
+
+		result, err := store.v2.Publish(appID, opts)
+		if err != nil {
+			return fmt.Errorf("publishing extension: %w", err)
+		}
+
+		fmt.Println("Publish operation completed")
+		fmt.Printf("Item ID: %s\n", result.ItemID)
+		fmt.Printf("State: %s\n", result.State.String())
+	}
 
 	return nil
 }
@@ -420,7 +580,7 @@ func Main() {
 		Usage: "uploads extension to the store",
 		Subcommands: []*cli.Command{{
 			Name:   "chrome",
-			Usage:  "inserts new extension to the chrome store",
+			Usage:  "inserts new extension to the chrome store (v1 API)",
 			Flags:  []cli.Flag{fileFlag},
 			Action: chromeInsertAction,
 		}, {
@@ -474,20 +634,25 @@ func Main() {
 			Usage: "publishes extension in the chrome store",
 			Flags: []cli.Flag{
 				appFlag,
+				&cli.BoolFlag{
+					Name:    "staged",
+					Aliases: []string{"s"},
+					Usage:   "(v2 only) stage for publishing in the future instead of publishing immediately",
+				},
 				&cli.StringFlag{
 					Name:    "target",
 					Aliases: []string{"t"},
-					Usage:   "publish target (trustedTesters or default)",
+					Usage:   "(v1 only) publish target (trustedTesters or default)",
 				},
 				&cli.IntFlag{
 					Name:    "percentage",
 					Aliases: []string{"p"},
-					Usage:   "percentage of existing users to receive update (0-100, new users always get latest)",
+					Usage:   "deployment percentage (0-100) for gradual rollout",
 				},
 				&cli.BoolFlag{
 					Name:    "expedited",
 					Aliases: []string{"e"},
-					Usage:   "request expedited review",
+					Usage:   "request skip review if qualified",
 				},
 			},
 			Action: chromePublishAction,

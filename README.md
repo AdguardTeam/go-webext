@@ -30,7 +30,7 @@ Before start, you have to get credentials to the stores API.
 
 How to get Chrome Store credentials API described here https://developer.chrome.com/docs/webstore/using_webstore_api/
 
-After getting `CODE`, `CLIENT_ID` and `CLIENT_SECRET`, you'd be able to get `refresh_token` via request to this url
+After getting `CODE`, `CLIENT_ID`, `CLIENT_SECRET`, you'd be able to get `refresh_token` via request to this url
 
 ```bash
 curl "https://accounts.google.com/o/oauth2/token" -d \
@@ -38,6 +38,8 @@ curl "https://accounts.google.com/o/oauth2/token" -d \
 ```
 
 **Note**: you have to use `refresh_token` instead of `access_token`.
+
+Also you need to set up the publisher ID in the Chrome Developer Dashboard and use it in your environment variables.
 
 #### Firefox Credentials
 
@@ -78,6 +80,16 @@ EDGE_ACCESS_TOKEN_URL=<access_token_url>
 EDGE_API_VERSION="v1"
 ```
 
+For Chrome Store (both v1.1 and v2):
+```dotenv
+CHROME_CLIENT_ID=<client_id>
+CHROME_CLIENT_SECRET=<client_secret>
+CHROME_REFRESH_TOKEN=<refresh_token>
+CHROME_PUBLISHER_ID=<publisher_id>
+```
+
+**Note**: `CHROME_PUBLISHER_ID` is required only for v2 API. Chrome Web Store now supports both v1.1 and v2 APIs. You can configure which API version to use via the `CHROME_API_VERSION` environment variable (defaults to v1). The `insert` command uses v1.1 API only. The `update`, `status`, and `publish` commands automatically use the configured API version.
+
 After that, you can use the CLI.
 
 ```sh
@@ -104,7 +116,11 @@ Examples to get extension status info from the stores:
 ###### Chrome Web Store
 
 ```sh
-./go-webext status chrome -a bjefoaoblohljkadffjcpkgfamdadogp
+# Using v1 API (default)
+./go-webext status chrome -a <item_id>
+
+# Using v2 API
+CHROME_API_VERSION=v2 ./go-webext status chrome -a <item_id>
 ```
 
 ###### Addons Mozilla Org
@@ -114,7 +130,13 @@ Examples to get extension status info from the stores:
 ```
 
 ##### Insert:
-Examples of commands to upload new extension (not uploaded before) to the stores:
+Upload new extension (not uploaded before) to the stores:
+
+###### Chrome Web Store (v1.1 API)
+
+```sh
+./go-webext insert chrome -f ./chrome.zip
+```
 
 ###### Addons Mozilla Org
 
@@ -122,29 +144,27 @@ Examples of commands to upload new extension (not uploaded before) to the stores
 ./go-webext insert firefox -f ./firefox.zip -s ./source.zip
 ```
 
-###### Chrome Web Store
-
-```sh
-./go-webext insert chrome -f ./chrome.zip
-```
-
 ###### Microsoft Edge Addons Store
 
 There is no API for creating a new product. You must complete these tasks manually in Microsoft Partner Center.
 
 ##### Update:
-Examples of commands to upload new version of extension to the stores:
+Upload new version of existing extension:
+
+###### Chrome Web Store
+
+```sh
+# Using v1 API (default)
+./go-webext update chrome -a <item_id> -f ./chrome.zip
+
+# Using v2 API (set CHROME_API_VERSION=v2)
+CHROME_API_VERSION=v2 ./go-webext update chrome -a <item_id> -f ./chrome.zip
+```
 
 ###### Addons Mozilla Org
 
 ```sh
 ./go-webext update firefox -f ./firefox.zip -s ./source.zip
-```
-
-###### Chrome Web Store
-
-```sh
-./go-webext update chrome -f ./chrome.zip -a bjefoaoblohljkadffjcpkgfamdadogp
 ```
 
 ###### Microsoft Edge Addons Store
@@ -154,31 +174,49 @@ Examples of commands to upload new version of extension to the stores:
 ```
 
 ##### Publish:
-Examples of commands to publish extensions to the stores:
+Publish extensions to the stores:
 
 ###### Chrome Web Store
 
+Using v1 API (default):
 ```sh
 # Basic publish
-./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp
+./go-webext publish chrome -a <item_id>
 
 # Publish to trusted testers
-./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -t trustedTesters
+./go-webext publish chrome -a <item_id> --target trustedTesters
+# or using short alias
+./go-webext publish chrome -a <item_id> -t trustedTesters
 
-# Gradual rollout to 10% of users
-./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -p 10
+# With gradual rollout and skip review
+./go-webext publish chrome -a <item_id> -p 50 --expedited
+# or using short alias
+./go-webext publish chrome -a <item_id> -p 50 -e
+```
 
-# Request expedited review
-./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -e
+Using v2 API:
+```sh
+# Basic publish (immediate after review completes)
+CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id>
 
-# Combine options (publish to trusted testers with 50% rollout and expedited review)
-./go-webext publish chrome -a bjefoaoblohljkadffjcpkgfamdadogp -t trustedTesters -p 50 -e
+# Staged publish (requires manual publish in dashboard)
+CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -s
+
+# Gradual rollout to 50% of users
+CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -p 50
+
+# Skip review if qualified
+CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -e
+
+# Combine options (staged publish with 50% rollout and skip review)
+CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -s -p 50 -e
 ```
 
 Available options:
-- `-t, --target`: Publish target ("trustedTesters" or "default"). Trusted testers are specific users you designate in the Chrome Web Store Developer Dashboard who can test your extension before it's released to the general public. You'll need to add their email addresses in the Account tab under Management > Trusted Testers.
-- `-p, --percentage`: Deployment percentage (0-100) for gradual rollout. Note: Using the API to change deployment percentage currently always triggers a review, even if only the percentage is changed. This behavior may change in the future ([discussion](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/oe_1PO9dVos/m/BXtyKySBCAAJ)).
-- `-e, --expedited`: Request expedited review process
+- `-t, --target`: (v1 only) Publish target (trustedTesters or default)
+- `-e, --expedited`: Request skip review if qualified
+- `-s, --staged`: (v2 only) Stage for publishing in the future instead of publishing immediately
+- `-p, --percentage`: Deployment percentage (0-100) for gradual rollout
 
 ## Planned features
 
