@@ -48,7 +48,6 @@ Test:
   final-tasks:
     - clean
   requirements: &requirements
-    - adg-docker: 'true'
     - extension: 'true'
 
 Lint:
