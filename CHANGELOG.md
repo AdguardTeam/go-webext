@@ -1,5 +1,11 @@
 # go-webext changelog
 
+## 0.4.0 (2026-03-06)
+
+### Added
+- `--approval-notes` / `-n` flag for `update firefox` command to provide
+  information for Mozilla reviewers (e.g. build reproduction instructions)
+
 ## 0.3.0 (2025-12-12)
 
 ### Added

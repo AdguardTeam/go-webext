@@ -259,7 +259,7 @@ type API interface {
 	Status(appID string) (*StatusResponse, error)
 	CreateUpload(fileData io.Reader, c Channel) (*UploadDetail, error)
 	UploadDetail(UUID string) (*UploadDetail, error)
-	CreateVersion(appID, UUID string) (*VersionInfo, error)
+	CreateVersion(appID, UUID, approvalNotes string) (*VersionInfo, error)
 	VersionDetail(appID, versionID string) (versionInfo *VersionInfo, err error)
 	CreateAddon(UUID string) (*AddonInfo, error)
 	AttachSourceToVersion(appID, versionID string, sourceData io.Reader) (err error)
@@ -476,7 +476,7 @@ func (s *Store) Insert(filePath, sourcepath string) (err error) {
 
 // Update uploads new Version of extension to the store
 // Before uploading it reads manifest.json for getting extension Version and uuid.
-func (s *Store) Update(extpath, sourcepath string, channel Channel) (err error) {
+func (s *Store) Update(extpath, sourcepath string, channel Channel, approvalNotes string) (err error) {
 	l := s.logger.With("action", "Update", "extpath", extpath, "sourcepath", sourcepath, "channel", channel)
 	l.Debug("initiating extension update")
 
@@ -504,7 +504,7 @@ func (s *Store) Update(extpath, sourcepath string, channel Channel) (err error) 
 		return fmt.Errorf("awaiting validation: %w", err)
 	}
 
-	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID)
+	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID, approvalNotes)
 	if err != nil {
 		return fmt.Errorf("creating version: %w", err)
 	}
@@ -586,18 +586,19 @@ func (s *Store) isSigned(appID, versionID string) (bool, error) {
 		return false, fmt.Errorf("failed to get upload status for appID: %s, versionID: %s, error: %w", appID, versionID, err)
 	}
 
-	if versionDetail.File.Status == "public" {
+	switch versionDetail.File.Status {
+	case "public":
 		l.Debug(
 			"full version details",
 			"version", versionDetail,
 		)
 
 		return true, nil
-	} else if versionDetail.File.Status == "disabled" {
+	case "disabled":
 		return false, fmt.Errorf("extension will not be signed automatically, version detail: %+v", versionDetail)
+	default:
+		return false, fmt.Errorf("extension is pending signature, version detail: %+v", versionDetail)
 	}
-
-	return false, fmt.Errorf("extension is pending signature, version detail: %+v", versionDetail)
 }
 
 // Sign uploads the extension to the store, waits for the signing process to complete, then downloads and saves the signed
@@ -658,7 +659,7 @@ func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 		return fmt.Errorf("error waiting for validation: %w", err)
 	}
 
-	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID)
+	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID, "")
 	if err != nil {
 		return fmt.Errorf("error creating version: %w", err)
 	}

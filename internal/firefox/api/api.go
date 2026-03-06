@@ -14,7 +14,7 @@
 // [Addons.Mozilla.Org]: https://addons.mozilla.org/
 // [chat]: https://matrix.to/#/#amo:mozilla.org
 // [mat]: https://matrix.to/#/@mat:mozilla.org
-package api
+package api //nolint:revive // "api" is a clear and conventional name for an API client sub-package
 
 import (
 	"bytes"
@@ -81,7 +81,8 @@ type Config struct {
 
 // VersionCreateRequest describes version json structure for request to the store api.
 type VersionCreateRequest struct {
-	Upload string `json:"upload"`
+	Upload        string `json:"upload"`
+	ApprovalNotes string `json:"approval_notes,omitempty"`
 }
 
 // AddonCreateRequest describes addon json structure to the store api.
@@ -380,14 +381,15 @@ func (a *API) CreateAddon(UUID string) (addonInfo *firefox.AddonInfo, err error)
 
 // CreateVersion creates new version for the extension with sourceData
 // https://addons-server.readthedocs.io/en/latest/topics/api/addons.html#version-create
-func (a *API) CreateVersion(appID, UUID string) (versionInfo *firefox.VersionInfo, err error) {
+func (a *API) CreateVersion(appID, UUID, approvalNotes string) (versionInfo *firefox.VersionInfo, err error) {
 	l := a.logger.With(slogutil.KeyPrefix, "CreateVersion", "appID", appID, "uuid", UUID)
 	l.Debug("creating new version")
 
 	apiURL := a.JoinPath("addon", appID, "versions", "/")
 
 	versionCreateRequest := VersionCreateRequest{
-		Upload: UUID,
+		Upload:        UUID,
+		ApprovalNotes: approvalNotes,
 	}
 
 	jsonBody, err := json.Marshal(versionCreateRequest)

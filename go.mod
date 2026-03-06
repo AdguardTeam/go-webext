@@ -1,6 +1,6 @@
 module github.com/adguardteam/go-webext
 
-go 1.23.6
+go 1.26.1
 
 require (
 	github.com/AdguardTeam/golibs v0.32.1

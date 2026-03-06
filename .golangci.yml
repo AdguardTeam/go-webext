@@ -1,52 +1,58 @@
-# options for analysis running
+version: "2"
 run:
-  # default concurrency is a available CPU number
   concurrency: 4
-
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  deadline: 2m
-
-# all available settings of specific linters
-linters-settings:
-  gocyclo:
-    min-complexity: 20
-  lll:
-    line-length: 200
-
 linters:
+  default: none
   enable:
+    - bodyclose
+    - dupl
     - errcheck
+    - gocyclo
+    - gosec
     - govet
     - ineffassign
-    - staticcheck
-    - unused
-    - bodyclose
-#    TODO enable later
-#    - depguard
-    - dupl
-    - gocyclo
-    - goimports
-    - revive
-    - gosec
     - misspell
-    - stylecheck
+    - revive
+    - staticcheck
     - unconvert
-  disable-all: true
-
-issues:
-  exclude-use-default: false
-  exclude-files:
-    - ".*generated.*"
-    - ".*_test.go"
-  exclude-dirs:
-    - tmp
-
-  # List of regexps of issue texts to exclude, empty list by default.
-  # But independently of this option we use default exclude patterns,
-  # it can be disabled by `exclude-use-default: false`. To list all
-  # excluded by default patterns execute `golangci-lint run --help`
-  exclude:
-    # errcheck defer Close
-    - error return value not checked \(defer .*\.Close()\)
-    # errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+    - unused
+  settings:
+    gosec:
+      excludes:
+        # G117 flags exported struct fields whose names match secret patterns
+        # (e.g. ClientSecret, RefreshToken). These are configuration structs
+        # populated from environment variables and need exported fields.
+        - G117
+        # G704 flags SSRF via taint analysis on client.Do(req) calls.
+        # URLs are built from env vars and manifest.json, not untrusted input.
+        - G704
+    gocyclo:
+      min-complexity: 20
+    lll:
+      line-length: 200
+  exclusions:
+    generated: lax
+    rules:
+      - path: (.+)\.go$
+        text: error return value not checked \(defer .*\.Close()\)
+      - path: (.+)\.go$
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv). is not checked
+    paths:
+      - .*generated.*
+      - .*_test.go
+      - tmp
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - .*generated.*
+      - .*_test.go
+      - tmp
+      - third_party$
+      - builtin$
+      - examples$

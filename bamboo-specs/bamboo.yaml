@@ -5,8 +5,8 @@ plan:
   key: GOWEBEXT
   name: gowebext
 variables:
-  dockerGo: golang:1.23.6
-  dockerLint: golangci/golangci-lint:v1.63.4
+  dockerGo: golang:1.26.1
+  dockerLint: golangci/golangci-lint:v2.10.1
 
 stages:
   - Test:

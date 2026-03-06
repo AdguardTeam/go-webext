@@ -363,6 +363,7 @@ func TestCreateVersion(t *testing.T) {
 		require.NoError(pt, err)
 
 		assert.Equal(t, actualVersionCreateRequest.Upload, testUUID)
+		assert.Empty(t, actualVersionCreateRequest.ApprovalNotes)
 
 		response, err := json.Marshal(expectedVersionInfo)
 		require.NoError(pt, err)
@@ -387,10 +388,60 @@ func TestCreateVersion(t *testing.T) {
 		Logger: slogutil.NewDiscardLogger(),
 	})
 
-	versionInfo, err := firefoxAPI.CreateVersion(appID, testUUID)
+	versionInfo, err := firefoxAPI.CreateVersion(appID, testUUID, "")
 	require.NoError(t, err)
 
 	assert.Equal(t, versionInfo, expectedVersionInfo)
+}
+
+func TestCreateVersionWithApprovalNotes(t *testing.T) {
+	expectedNotes := "Build with: docker run --rm -v $(pwd):/src example/build"
+	expectedVersionInfo := &firefox.VersionInfo{
+		ID:            12345,
+		ApprovalNotes: expectedNotes,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pt := testutil.PanicT{}
+		assert.Equal(t, http.MethodPost, r.Method)
+
+		body, err := io.ReadAll(r.Body)
+		require.NoError(pt, err)
+
+		var actualVersionCreateRequest api.VersionCreateRequest
+		err = json.Unmarshal(body, &actualVersionCreateRequest)
+		require.NoError(pt, err)
+
+		assert.Equal(t, testUUID, actualVersionCreateRequest.Upload)
+		assert.Equal(t, expectedNotes, actualVersionCreateRequest.ApprovalNotes)
+
+		response, err := json.Marshal(expectedVersionInfo)
+		require.NoError(pt, err)
+
+		w.WriteHeader(http.StatusCreated)
+		_, err = w.Write(response)
+		require.NoError(pt, err)
+	}))
+
+	defer server.Close()
+
+	storeURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	firefoxAPI := api.NewAPI(api.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Now: func() int64 {
+			return testTime
+		},
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	versionInfo, err := firefoxAPI.CreateVersion(appID, testUUID, expectedNotes)
+	require.NoError(t, err)
+
+	assert.Equal(t, expectedVersionInfo, versionInfo)
 }
 
 func TestVersionDetail(t *testing.T) {

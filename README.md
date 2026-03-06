@@ -165,7 +165,13 @@ CHROME_API_VERSION=v2 ./go-webext update chrome -a <item_id> -f ./chrome.zip
 
 ```sh
 ./go-webext update firefox -f ./firefox.zip -s ./source.zip
+
+# With approval notes for Mozilla reviewers (e.g. build instructions)
+./go-webext update firefox -f ./firefox.zip -s ./source.zip -n "Build with: docker run --rm -v \$(pwd):/src example/build"
 ```
+
+Available options:
+- `-n, --approval-notes`: Information for Mozilla reviewers, visible only to Mozilla (e.g. build reproduction instructions)
 
 ###### Microsoft Edge Addons Store
 

@@ -186,7 +186,8 @@ func getEdgeStore() (*edge.Store, error) {
 
 	var clientConfig edge.ClientConfig
 
-	if cfg.APIVersion == edge.APIVersionV1 {
+	switch cfg.APIVersion {
+	case edge.APIVersionV1:
 		if err := validate.NotEmpty("EDGE_CLIENT_SECRET", cfg.ClientSecret); err != nil {
 			return nil, err
 		}
@@ -198,12 +199,12 @@ func getEdgeStore() (*edge.Store, error) {
 			return nil, fmt.Errorf("failed to parse access token URL: %w", err)
 		}
 		clientConfig = edge.NewV1Config(cfg.ClientID, cfg.ClientSecret, accessTokenURL)
-	} else if cfg.APIVersion == edge.APIVersionV1_1 {
+	case edge.APIVersionV1_1:
 		if err := validate.NotEmpty("EDGE_API_KEY", cfg.APIKey); err != nil {
 			return nil, err
 		}
 		clientConfig = edge.NewV1_1Config(cfg.ClientID, cfg.APIKey)
-	} else {
+	default:
 		return nil, fmt.Errorf("unsupported API version: %s", cfg.APIVersion)
 	}
 
@@ -346,7 +347,7 @@ func edgeInsertAction(_ *cli.Context) error {
 		return fmt.Errorf("inserting extension: %w", err)
 	}
 
-	fmt.Println(result)
+	fmt.Println(string(result))
 
 	return nil
 }
@@ -383,7 +384,9 @@ func firefoxUpdateAction(c *cli.Context) error {
 		return fmt.Errorf("parsing channel: %w", err)
 	}
 
-	err = store.Update(filepath, sourcepath, channel)
+	approvalNotes := c.String("approval-notes")
+
+	err = store.Update(filepath, sourcepath, channel, approvalNotes)
 	if err != nil {
 		return fmt.Errorf("updating extension: %w", err)
 	}
@@ -558,6 +561,11 @@ func Main() {
 		Category: "Miscellaneous:",
 	}
 	channelFlag := &cli.StringFlag{Name: "channel", Aliases: []string{"c"}, Required: true}
+	approvalNotesFlag := &cli.StringFlag{
+		Name:    "approval-notes",
+		Aliases: []string{"n"},
+		Usage:   "information for Mozilla reviewers, visible only to Mozilla",
+	}
 
 	app.Flags = []cli.Flag{verboseFlag}
 
@@ -614,6 +622,7 @@ func Main() {
 				fileFlag,
 				sourceFlag,
 				channelFlag,
+				approvalNotesFlag,
 			},
 			Action: firefoxUpdateAction,
 		}, {

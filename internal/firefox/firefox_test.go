@@ -29,7 +29,7 @@ type MockAPI struct {
 	onUploadDetail          func(UUID string) (*firefox.UploadDetail, error)
 	onCreateAddon           func(UUID string) (*firefox.AddonInfo, error)
 	onAttachSourceToVersion func(appID, versionID string, sourceData io.Reader) error
-	onCreateVersion         func(appID, UUID string) (*firefox.VersionInfo, error)
+	onCreateVersion         func(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error)
 	onVersionDetail         func(appID, versionID string) (*firefox.VersionInfo, error)
 	onDownloadSignedByURL   func(url string) ([]byte, error)
 	onVersionsList          func(appID string) ([]*firefox.VersionInfo, error)
@@ -55,8 +55,8 @@ func (m *MockAPI) AttachSourceToVersion(appID, versionID string, sourceData io.R
 	return m.onAttachSourceToVersion(appID, versionID, sourceData)
 }
 
-func (m *MockAPI) CreateVersion(appID, UUID string) (*firefox.VersionInfo, error) {
-	return m.onCreateVersion(appID, UUID)
+func (m *MockAPI) CreateVersion(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error) {
+	return m.onCreateVersion(appID, UUID, approvalNotes)
 }
 
 func (m *MockAPI) VersionDetail(appID, versionID string) (*firefox.VersionInfo, error) {
@@ -175,9 +175,10 @@ func TestUpdate(t *testing.T) {
 				Valid:     true,
 			}, nil
 		},
-		onCreateVersion: func(appID, UUID string) (*firefox.VersionInfo, error) {
+		onCreateVersion: func(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error) {
 			require.Equal(t, testAppID, appID)
 			require.Equal(t, testUUID, UUID)
+			require.Empty(t, approvalNotes)
 
 			return &firefox.VersionInfo{
 				ID: testVersionID,
@@ -200,7 +201,45 @@ func TestUpdate(t *testing.T) {
 		Logger: slogutil.NewDiscardLogger(),
 	})
 
-	err := store.Update(testFilepath, testSourcepath, testChannel)
+	err := store.Update(testFilepath, testSourcepath, testChannel, "")
+	require.NoError(t, err)
+}
+
+func TestUpdateWithApprovalNotes(t *testing.T) {
+	expectedNotes := "Build with: docker run --rm -v $(pwd):/src example/build"
+
+	mockAPI := &MockAPI{
+		onCreateUpload: func(fileData io.Reader, c firefox.Channel) (*firefox.UploadDetail, error) {
+			return &firefox.UploadDetail{
+				UUID: testUUID,
+			}, nil
+		},
+		onUploadDetail: func(UUID string) (*firefox.UploadDetail, error) {
+			return &firefox.UploadDetail{
+				UUID:      testUUID,
+				Processed: true,
+				Valid:     true,
+			}, nil
+		},
+		onCreateVersion: func(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error) {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, testUUID, UUID)
+			require.Equal(t, expectedNotes, approvalNotes)
+
+			return &firefox.VersionInfo{
+				ID: testVersionID,
+			}, nil
+		},
+		onAttachSourceToVersion: func(appID, versionID string, sourceData io.Reader) error {
+			return nil
+		},
+	}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	err := store.Update(testFilepath, testSourcepath, testChannel, expectedNotes)
 	require.NoError(t, err)
 }
 
@@ -231,9 +270,10 @@ func TestSign(t *testing.T) {
 				Valid:     true,
 			}, nil
 		},
-		onCreateVersion: func(appID, UUID string) (*firefox.VersionInfo, error) {
+		onCreateVersion: func(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error) {
 			require.Equal(t, testAppID, appID)
 			require.Equal(t, testUUID, UUID)
+			require.Empty(t, approvalNotes)
 
 			return &firefox.VersionInfo{
 				ID: testVersionID,
