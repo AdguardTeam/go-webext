@@ -508,8 +508,9 @@ func firefoxSignAction(c *cli.Context) error {
 	filepath := c.String("file")
 	sourcepath := c.String("source")
 	output := c.String("output")
+	approvalNotes := c.String("approval-notes")
 
-	err = store.Sign(filepath, sourcepath, output)
+	err = store.Sign(filepath, sourcepath, output, approvalNotes)
 	if err != nil {
 		return fmt.Errorf("signing extension: %w", err)
 	}
@@ -688,6 +689,7 @@ func Main() {
 					Value:    "firefox.xpi", // Default value
 					Required: false,
 				},
+				approvalNotesFlag,
 			},
 			Action: firefoxSignAction,
 		}},

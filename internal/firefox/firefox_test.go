@@ -315,7 +315,7 @@ func TestSign(t *testing.T) {
 		Logger: slogutil.NewDiscardLogger(),
 	})
 
-	err := store.Sign(testFilepath, testSourcepath, expectedFilename)
+	err := store.Sign(testFilepath, testSourcepath, expectedFilename, "")
 	require.NoError(t, err)
 
 	// Check if the sourcefile exists.
@@ -327,6 +327,71 @@ func TestSign(t *testing.T) {
 		err = os.Remove(expectedFilename)
 		if err != nil {
 			t.Error("Failed to remove sourcefile:", err)
+		}
+	})
+}
+
+func TestSignWithApprovalNotes(t *testing.T) {
+	expectedFilename := "firefox_notes.xpi"
+	expectedNotes := "Build with: docker run --rm -v $(pwd):/src example/build"
+
+	mockAPI := &MockAPI{
+		onCreateUpload: func(fileData io.Reader, channel firefox.Channel) (*firefox.UploadDetail, error) {
+			require.Equal(t, firefox.ChannelUnlisted, channel)
+
+			return &firefox.UploadDetail{
+				UUID: testUUID,
+			}, nil
+		},
+		onUploadDetail: func(UUID string) (*firefox.UploadDetail, error) {
+			return &firefox.UploadDetail{
+				UUID:      testUUID,
+				Processed: true,
+				Valid:     true,
+			}, nil
+		},
+		onCreateVersion: func(appID, UUID, approvalNotes string) (*firefox.VersionInfo, error) {
+			require.Equal(t, testAppID, appID)
+			require.Equal(t, testUUID, UUID)
+			require.Equal(t, expectedNotes, approvalNotes)
+
+			return &firefox.VersionInfo{
+				ID: testVersionID,
+			}, nil
+		},
+		onAttachSourceToVersion: func(appID, versionID string, sourceData io.Reader) error {
+			return nil
+		},
+		onVersionDetail: func(appID, versionID string) (*firefox.VersionInfo, error) {
+			return &firefox.VersionInfo{
+				File: firefox.FileInfo{
+					Status: "public",
+					URL:    testURL,
+				},
+			}, nil
+		},
+		onDownloadSignedByURL: func(url string) ([]byte, error) {
+			return []byte(""), nil
+		},
+		onVersionsList: func(appID string) ([]*firefox.VersionInfo, error) {
+			return []*firefox.VersionInfo{}, nil
+		},
+	}
+	store := firefox.NewStore(firefox.StoreConfig{
+		API:    mockAPI,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	err := store.Sign(testFilepath, testSourcepath, expectedFilename, expectedNotes)
+	require.NoError(t, err)
+
+	_, err = os.Stat(expectedFilename)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		err = os.Remove(expectedFilename)
+		if err != nil {
+			t.Error("Failed to remove file:", err)
 		}
 	})
 }

@@ -604,7 +604,7 @@ func (s *Store) isSigned(appID, versionID string) (bool, error) {
 // Sign uploads the extension to the store, waits for the signing process to complete, then downloads and saves the signed
 // extension in the specified directory. The unlisted channel is always used for signing.
 // If the extension is already uploaded, it will be downloaded and saved in the specified directory.
-func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
+func (s *Store) Sign(extpath, sourcepath, output, approvalNotes string) (err error) {
 	l := s.logger.With("action", "Sign", "extpath", extpath, "sourcepath", sourcepath)
 	l.Debug("initiating extension signing")
 
@@ -659,7 +659,7 @@ func (s *Store) Sign(extpath, sourcepath, output string) (err error) {
 		return fmt.Errorf("error waiting for validation: %w", err)
 	}
 
-	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID, "")
+	versionInfo, err := s.api.CreateVersion(appID, uploadDetail.UUID, approvalNotes)
 	if err != nil {
 		return fmt.Errorf("error creating version: %w", err)
 	}

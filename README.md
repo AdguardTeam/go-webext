@@ -1,206 +1,222 @@
 # go-webext
 
-Utils for managing web extensions written in Go.
+A CLI tool for managing browser extensions across multiple web stores:
+Chrome Web Store, Firefox Add-ons (AMO), and Microsoft Edge Add-ons.
+It supports uploading, updating, publishing, signing, and checking the status
+of extensions via each store's API.
 
-## CLI
+## Contents
 
-### Installation
+- [Installation](#installation)
+- [Credentials](#credentials)
+- [Environment Variables](#environment-variables)
+- [Usage](#usage)
+  - [Global Options](#global-options)
+  - [Commands](#commands)
+  - [Examples](#examples)
+- [Documentation](#documentation)
+
+## Installation
 
 ```bash
-go install github.com/adguardteam/go-webext
+go install github.com/adguardteam/go-webext@latest
 ```
 
-### Deployment
+To install a specific version:
 
-To release a new version:
-
-1. Create a new release on GitHub
-2. Add a new tag following semantic versioning (e.g., v0.1.3)
-
-Users can install a specific version using:
 ```bash
-go install github.com/adguardteam/go-webext@v0.1.3
+go install github.com/adguardteam/go-webext@v0.4.1
 ```
 
-### Usage:
+## Credentials
 
-Before start, you have to get credentials to the stores API.
+Before using the CLI, obtain API credentials for each store you plan to use.
 
-#### Chrome Credentials
+### Chrome Web Store
 
-How to get Chrome Store credentials API described here https://developer.chrome.com/docs/webstore/using_webstore_api/
+Follow the guide at <https://developer.chrome.com/docs/webstore/using_webstore_api/>
+to obtain `CODE`, `CLIENT_ID`, and `CLIENT_SECRET`.
 
-After getting `CODE`, `CLIENT_ID`, `CLIENT_SECRET`, you'd be able to get `refresh_token` via request to this url
+Then get a `refresh_token`:
 
 ```bash
 curl "https://accounts.google.com/o/oauth2/token" -d \
 "client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&code=${CODE}&grant_type=authorization_code&redirect_uri=urn:ietf:wg:oauth:2.0:oob"
 ```
 
-**Note**: you have to use `refresh_token` instead of `access_token`.
+**Note**: Use the `refresh_token`, not the `access_token`.
 
-Also you need to set up the publisher ID in the Chrome Developer Dashboard and use it in your environment variables.
+Set up the publisher ID in the Chrome Developer Dashboard if you use the v2 API.
 
-#### Firefox Credentials
+### Firefox Add-ons (AMO)
 
-Getting credentials for Addons Mozilla Org is not difficult. You should have a Firefox account and be logged in. After
-that go to the following link: https://addons.mozilla.org/en-US/developers/addon/api/key/
+Log in to your Firefox account and generate API credentials at
+<https://addons.mozilla.org/en-US/developers/addon/api/key/>.
 
-#### Edge Credentials
+### Microsoft Edge Add-ons
 
-Microsoft Edge Addons Store now supports two API versions:
-- v1.1 (Recommended) - Uses API Key authentication
-- v1.0 (Deprecated) - Uses Client Secret and Access Token URL
+Two API versions are supported:
 
-**Important Note**: Microsoft is deprecating v1.0 API. You should migrate to v1.1 as soon as possible because:
-- Secrets are being deprecated and replaced with API keys
-- Access Token URL is being deprecated
-- API key expiration will reduce from 2 years to 72 days
+- **v1.1 (recommended)** — uses API Key authentication.
+- **v1.0 (deprecated)** — uses Client Secret and Access Token URL. Microsoft is
+  deprecating secrets in favor of API keys, and the key expiration will reduce
+  from 2 years to 72 days.
 
-For v1.1 API credentials setup, visit: https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/api/using-addons-api?tabs=v1-1
+For v1.1 credentials setup, visit:
+<https://learn.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/api/using-addons-api?tabs=v1-1>.
 
-#### Environment variables
+## Environment Variables
 
-Received credentials can be stored in the `.env` file or provided via environment variables.
+Credentials are loaded from a `.env` file in the working directory or from
+environment variables directly.
 
-For Edge Store v1.1 (Recommended):
-```dotenv
-EDGE_CLIENT_ID=<client_id>
-EDGE_API_KEY=<api_key>
-EDGE_API_VERSION="v1.1"
-```
+### Chrome
 
-**Note**: The Edge API key might contain special characters that need to be escaped correctly. You can use the `godotenv` library to handle this. For more details on writing env files, refer to the [godotenv documentation](https://github.com/joho/godotenv?tab=readme-ov-file#writing-env-files).
-
-For Edge Store v1.0 (Deprecated):
-```dotenv
-EDGE_CLIENT_ID=<client_id>
-EDGE_CLIENT_SECRET=<client_secret>
-EDGE_ACCESS_TOKEN_URL=<access_token_url>
-EDGE_API_VERSION="v1"
-```
-
-For Chrome Store (both v1.1 and v2):
 ```dotenv
 CHROME_CLIENT_ID=<client_id>
 CHROME_CLIENT_SECRET=<client_secret>
 CHROME_REFRESH_TOKEN=<refresh_token>
 CHROME_PUBLISHER_ID=<publisher_id>
+CHROME_API_VERSION=v1
 ```
 
-**Note**: `CHROME_PUBLISHER_ID` is required only for v2 API. Chrome Web Store now supports both v1.1 and v2 APIs. You can configure which API version to use via the `CHROME_API_VERSION` environment variable (defaults to v1). The `insert` command uses v1.1 API only. The `update`, `status`, and `publish` commands automatically use the configured API version.
+`CHROME_PUBLISHER_ID` is required only for the v2 API. `CHROME_API_VERSION`
+defaults to `v1`; set to `v2` to use the Chrome Web Store v2 API. The `insert`
+command always uses the v1 API.
 
-After that, you can use the CLI.
+### Firefox
 
-```sh
+```dotenv
+FIREFOX_CLIENT_ID=<client_id>
+FIREFOX_CLIENT_SECRET=<client_secret>
+```
+
+### Edge (v1.1 — recommended)
+
+```dotenv
+EDGE_CLIENT_ID=<client_id>
+EDGE_API_KEY=<api_key>
+EDGE_API_VERSION=v1.1
+```
+
+**Note**: The Edge API key may contain special characters that need escaping.
+Refer to the [godotenv documentation](https://github.com/joho/godotenv?tab=readme-ov-file#writing-env-files)
+for quoting rules.
+
+### Edge (v1.0 — deprecated)
+
+```dotenv
+EDGE_CLIENT_ID=<client_id>
+EDGE_CLIENT_SECRET=<client_secret>
+EDGE_ACCESS_TOKEN_URL=<access_token_url>
+EDGE_API_VERSION=v1
+```
+
+## Usage
+
+```
 webext [global options] command [command options] [arguments...]
 ```
 
-#### Commands:
+### Global Options
 
-```
-- status   returns extension info
-- insert   uploads extension to the store
-- update   uploads new version of extension to the store
-- publish  publishes extension to the store
-- sign     signs extension in the store
-- help, h  shows a list of commands or help for one command
-```
+- `-v, --verbose` — enable debug-level logging.
 
-#### Examples:
+### Commands
 
-##### Status:
+| Command   | Description                                      |
+|-----------|--------------------------------------------------|
+| `status`  | Returns extension info                           |
+| `insert`  | Uploads a new extension to the store             |
+| `update`  | Uploads a new version of an existing extension   |
+| `publish` | Publishes an extension to the store              |
+| `sign`    | Signs an extension in the store (Firefox only)   |
+| `help`    | Shows a list of commands or help for one command |
 
-Examples to get extension status info from the stores:
+### Examples
 
-###### Chrome Web Store
+#### Status
+
+Get extension status info from the stores:
 
 ```sh
-# Using v1 API (default)
+# Chrome (v1 API, default)
 ./go-webext status chrome -a <item_id>
 
-# Using v2 API
+# Chrome (v2 API)
 CHROME_API_VERSION=v2 ./go-webext status chrome -a <item_id>
-```
 
-###### Addons Mozilla Org
-
-```sh
+# Firefox
 ./go-webext status firefox --app sample@example.org
 ```
 
-##### Insert:
-Upload new extension (not uploaded before) to the stores:
+#### Insert
 
-###### Chrome Web Store (v1.1 API)
+Upload a new extension (not uploaded before):
 
 ```sh
+# Chrome (v1 API)
 ./go-webext insert chrome -f ./chrome.zip
-```
 
-###### Addons Mozilla Org
-
-```sh
+# Firefox
 ./go-webext insert firefox -f ./firefox.zip -s ./source.zip
 ```
 
-###### Microsoft Edge Addons Store
+**Edge**: There is no API for creating a new product. You must create it
+manually in Microsoft Partner Center.
 
-There is no API for creating a new product. You must complete these tasks manually in Microsoft Partner Center.
+#### Update
 
-##### Update:
-Upload new version of existing extension:
-
-###### Chrome Web Store
+Upload a new version of an existing extension:
 
 ```sh
-# Using v1 API (default)
+# Chrome (v1 API, default)
 ./go-webext update chrome -a <item_id> -f ./chrome.zip
 
-# Using v2 API (set CHROME_API_VERSION=v2)
+# Chrome (v2 API)
 CHROME_API_VERSION=v2 ./go-webext update chrome -a <item_id> -f ./chrome.zip
+
+# Firefox (listed channel)
+./go-webext update firefox -f ./firefox.zip -s ./source.zip -c listed
+
+# Firefox with approval notes for Mozilla reviewers
+./go-webext update firefox -f ./firefox.zip -s ./source.zip -c listed \
+  -n "Build with: docker run --rm -v \$(pwd):/src example/build"
+
+# Edge
+./go-webext update edge -f ./edge.zip -a <product_id>
 ```
 
-###### Addons Mozilla Org
+Firefox update options:
 
-```sh
-./go-webext update firefox -f ./firefox.zip -s ./source.zip
+- `-c, --channel` (required): `listed` or `unlisted`
+- `-s, --source`: path to source archive
+- `-n, --approval-notes`: information for Mozilla reviewers, visible only to
+  Mozilla (e.g. build reproduction instructions)
 
-# With approval notes for Mozilla reviewers (e.g. build instructions)
-./go-webext update firefox -f ./firefox.zip -s ./source.zip -n "Build with: docker run --rm -v \$(pwd):/src example/build"
-```
+Edge update options:
 
-Available options:
-- `-n, --approval-notes`: Information for Mozilla reviewers, visible only to Mozilla (e.g. build reproduction instructions)
+- `-t, --timeout`: upload timeout in seconds
 
-###### Microsoft Edge Addons Store
+#### Publish
 
-```sh
-./go-webext update edge -f ./edge.zip -a 7a933b66-f8ff-4292-bc88-db593afg4bf8
-```
-
-##### Publish:
 Publish extensions to the stores:
 
-###### Chrome Web Store
+**Chrome v1 API** (default):
 
-Using v1 API (default):
 ```sh
 # Basic publish
 ./go-webext publish chrome -a <item_id>
 
 # Publish to trusted testers
-./go-webext publish chrome -a <item_id> --target trustedTesters
-# or using short alias
 ./go-webext publish chrome -a <item_id> -t trustedTesters
 
 # With gradual rollout and skip review
-./go-webext publish chrome -a <item_id> -p 50 --expedited
-# or using short alias
 ./go-webext publish chrome -a <item_id> -p 50 -e
 ```
 
-Using v2 API:
+**Chrome v2 API**:
+
 ```sh
 # Basic publish (immediate after review completes)
 CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id>
@@ -214,29 +230,48 @@ CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -p 50
 # Skip review if qualified
 CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -e
 
-# Combine options (staged publish with 50% rollout and skip review)
+# Combine options (staged + 50% rollout + skip review)
 CHROME_API_VERSION=v2 ./go-webext publish chrome -a <item_id> -s -p 50 -e
 ```
 
-Available options:
-- `-t, --target`: (v1 only) Publish target (trustedTesters or default)
-- `-e, --expedited`: Request skip review if qualified
-- `-s, --staged`: (v2 only) Stage for publishing in the future instead of publishing immediately
-- `-p, --percentage`: Deployment percentage (0-100) for gradual rollout
+Chrome publish options:
 
-## Planned features
+- `-t, --target`: (v1 only) publish target (`trustedTesters` or `default`)
+- `-e, --expedited`: request skip review if qualified
+- `-s, --staged`: (v2 only) stage for future publishing instead of immediate
+- `-p, --percentage`: deployment percentage (0–100) for gradual rollout
 
-- [ ] create CLI to deploy to the stores
-    - [x] chrome
-    - [x] firefox
-    - [x] edge
-    - [ ] opera
-    - [ ] static
-    - [ ] TODO add description for every possible command
-- [ ] get publish status for extensions from storage (published, draft, on review)
-    - [ ] subscribe on status change via email or slack
-- [ ] collect stats from storage
+**Edge**:
 
-## Planned improvements
+```sh
+./go-webext publish edge -a <product_id>
+```
 
-- [ ] setup sentry to collect errors
+#### Sign
+
+Sign an extension (Firefox only). Uses the unlisted channel.
+
+```sh
+# Basic sign (output defaults to firefox.xpi)
+./go-webext sign firefox -f ./firefox.zip -s ./source.zip
+
+# Specify output path
+./go-webext sign firefox -f ./firefox.zip -s ./source.zip -o ./signed.xpi
+
+# With approval notes
+./go-webext sign firefox -f ./firefox.zip -s ./source.zip \
+  -n "Build with: docker run --rm -v \$(pwd):/src example/build"
+```
+
+Sign options:
+
+- `-s, --source`: path to source archive
+- `-o, --output`: output file path (default: `firefox.xpi`)
+- `-n, --approval-notes`: information for Mozilla reviewers
+
+## Documentation
+
+- [Development](DEVELOPMENT.md) — setup, build, test, and contribute
+- [Deployment and configuration](DEPLOYMENT.md) — release process
+- [Changelog](CHANGELOG.md) — release history
+- [LLM agent rules](AGENTS.md) — project context for AI agents

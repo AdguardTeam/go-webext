@@ -1,5 +1,11 @@
 # go-webext changelog
 
+## 0.4.1 (2026-03-16)
+
+### Added
+- `--approval-notes` / `-n` flag for `sign firefox` command, matching the
+  existing flag on `update firefox`
+
 ## 0.4.0 (2026-03-06)
 
 ### Added
