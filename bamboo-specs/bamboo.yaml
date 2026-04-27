@@ -4,9 +4,6 @@ plan:
   project-key: ADGEXT
   key: GOWEBEXT
   name: gowebext
-variables:
-  dockerGo: golang:1.26.1
-  dockerLint: golangci/golangci-lint:v2.10.1
 
 stages:
   - Test:
@@ -22,11 +19,6 @@ stages:
         - Lint
 
 Test:
-  docker:
-    image: ${bamboo.dockerGo}
-    volumes:
-      ${system.GO_CACHE_DIR}: "${bamboo.cacheGo}"
-      ${system.GO_PKG_CACHE_DIR}: "${bamboo.cacheGoPkg}"
   key: TEST
   other:
     clean-working-dir: true
@@ -39,24 +31,25 @@ Test:
           - |-
             set -x
             set -e
-            ls -al
 
             # Fix mixed logs
             exec 2>&1
 
-            go test -race ./...
+            docker build \
+              --file Dockerfile \
+              --progress plain \
+              --target test-output \
+              --output type=local,dest=output \
+              .
   final-tasks:
-    - clean
+    - script:
+        interpreter: SHELL
+        scripts:
+          - ./bamboo-specs/scripts/cleanup.sh ""
   requirements: &requirements
     - extension: 'true'
 
 Lint:
-  docker:
-    image: ${bamboo.dockerLint}
-    volumes:
-      ${system.GO_CACHE_DIR}: "${bamboo.cacheGo}"
-      ${system.GO_PKG_CACHE_DIR}: "${bamboo.cacheGoPkg}"
-      ${bamboo.build.working.directory}: "/app"
   key: LINT
   other:
     clean-working-dir: true
@@ -69,16 +62,21 @@ Lint:
           - |-
             set -x
             set -e
-            ls -al
 
             # Fix mixed logs
             exec 2>&1
 
-            # Disable VCS stamping to prevent "error obtaining VCS status" in bamboo CI environment
-            # where full git history is not available
-            export GOFLAGS="-buildvcs=false"
-
-            golangci-lint run -v
+            docker build \
+              --file Dockerfile \
+              --progress plain \
+              --target lint-output \
+              --output type=local,dest=output \
+              .
+  final-tasks:
+    - script:
+        interpreter: SHELL
+        scripts:
+          - ./bamboo-specs/scripts/cleanup.sh ""
   requirements: *requirements
 
 branches:

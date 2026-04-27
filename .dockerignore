@@ -1,0 +1,14 @@
+.git
+.idea
+.vscode
+.DS_Store
+.env
+tmp/
+output/
+vendor/
+Dockerfile*
+*.md
+*.log
+coverage.html
+bamboo-specs/
+build/

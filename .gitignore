@@ -2,3 +2,6 @@
 .env
 tmp
 coverage.html
+
+# Output directory for CI build
+output/
