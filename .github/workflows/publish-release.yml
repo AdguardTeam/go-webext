@@ -1,0 +1,79 @@
+name: Publish release
+
+description: >-
+  Tags the release commit, lints and tests via Docker, mirrors to the public
+  repo, creates an assetless GitHub Release, and notifies Slack.
+
+on:
+  # Release PRs are always internal (created by prepare-release.yml).
+  pull_request:
+    types: [closed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to publish manually
+        required: false
+        type: string
+
+jobs:
+  tag:
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/tag-from-changelog.yml@master
+    with:
+      ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha || github.ref_name }}
+      team: extensions
+    # `contents: write` — create the git tag
+    permissions:
+      contents: write
+
+  test:
+    name: Lint and test
+    needs: tag
+    # Only run when a release-bump PR was merged, or on manual dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-bump/'))
+    runs-on: team-extensions
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha || github.ref_name }}
+
+      - name: Lint
+        run: DOCKER_BUILDKIT=1 docker build --progress plain --target lint-output .
+
+      - name: Test
+        run: DOCKER_BUILDKIT=1 docker build --progress plain --target test-output .
+
+  mirror-and-release:
+    needs: [tag, test]
+    uses: AdGuardSoftwareLimited/actions/.github/workflows/mirror-and-release.yml@master
+    with:
+      team: extensions
+      target_repo: AdguardTeam/go-webext
+      tag: ${{ needs.tag.outputs.tag }}
+      changelog: ${{ needs.tag.outputs.changelog }}
+    secrets: inherit
+    # `actions: write` — disable workflows in the public mirror
+    # `contents: write` — create GitHub Release on public repo
+    # `id-token: write` — Octopass token for mirror push
+    permissions:
+      actions: write
+      contents: write
+      id-token: write
+
+  notify:
+    name: Notify
+    needs: [tag, mirror-and-release]
+    if: needs.mirror-and-release.result == 'success'
+    runs-on: team-extensions
+    steps:
+      - name: Send Slack notification
+        uses: AdGuardSoftwareLimited/actions/actions/slack@master
+        with:
+          channel: '#adguard-extension-vcs'
+          message: ':white_check_mark: *@adguard/go-webext* *${{ needs.tag.outputs.tag }}* released — <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|view run>'
+          color: good

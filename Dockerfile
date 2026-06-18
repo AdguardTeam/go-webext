@@ -39,3 +39,20 @@ RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-webext-gomod \
 
 FROM scratch AS lint-output
 COPY --from=lint /app/go.sum /
+
+# =============================================================================
+# Build plan
+#
+# Verifies that the package compiles. The resulting binary is NOT published —
+# the release is assetless and consumers build locally, e.g.
+#   go install github.com/AdguardTeam/go-webext@<tag>
+# This target exists only so CI can fail fast on code that does not build.
+# =============================================================================
+
+FROM test AS build
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-webext-gomod \
+    --mount=type=cache,target=/root/.cache/go-build,id=go-webext-gobuild \
+    GOFLAGS="-buildvcs=false" go build -o go-webext .
+
+FROM scratch AS build-output
+COPY --from=build /app/go-webext /
