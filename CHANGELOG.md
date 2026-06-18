@@ -1,30 +1,46 @@
 # go-webext changelog
 
-## 0.4.1 (2026-03-16)
+## [Unreleased]
+
+### Added
+
+### Changed
+
+- `CHANGELOG.md` converted to the Keep a Changelog format.
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.4.1] - 2026-03-16
 
 ### Added
 - `--approval-notes` / `-n` flag for `sign firefox` command, matching the
   existing flag on `update firefox`
 
-## 0.4.0 (2026-03-06)
+## [0.4.0] - 2026-03-06
 
 ### Added
 - `--approval-notes` / `-n` flag for `update firefox` command to provide
   information for Mozilla reviewers (e.g. build reproduction instructions)
 
-## 0.3.0 (2025-12-12)
+## [0.3.0] - 2025-12-12
 
 ### Added
 - Chrome Web Store v2 API support
 - `CHROME_API_VERSION` environment variable to configure API version(defaults to v1)
 
-## 0.2.1 (2025-09-22)
+## [0.2.1] - 2025-09-22
 
 ### Changed
 - Timeout for Chrome Web Store API requests for `publish` command increased
   to 120 seconds to handle skip review check.
 
-## 0.2.0 (2025-02-07)
+## [0.2.0] - 2025-02-07
 
 ### Added
 - Support for Microsoft Edge Store API v1.1
@@ -34,22 +50,33 @@
 - Marked Microsoft Edge Store API v1.0 as deprecated (will be removed by Microsoft soon)
 - Updated documentation for Edge Store API credentials
 
-## 0.1.3 (2024-02-28)
+## [0.1.3] - 2024-02-28
 
 ### Changed
 - Download already signed files instead of uploading again.
 
-## 0.1.2 (2023-10-19)
+## [0.1.2] - 2023-10-19
 
 ### Changed
 - Fix downloading signed xpi file.
 
-## 0.1.1 (2023-10-10)
+## [0.1.1] - 2023-10-10
 
 ### Changed
 - Added output field to specify where to save signed xpi file.
 
-## 0.1.0 (2023-07-04)
+## [0.1.0] - 2023-07-04
 
 ### Changed
 - We've migrated from using the v4 API to the v5 API of AMO.
+
+[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/AdguardTeam/go-webext/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/AdguardTeam/go-webext/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/AdguardTeam/go-webext/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/AdguardTeam/go-webext/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/AdguardTeam/go-webext/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/AdguardTeam/go-webext/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/AdguardTeam/go-webext/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/AdguardTeam/go-webext/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/AdguardTeam/go-webext/releases/tag/v0.1.0
