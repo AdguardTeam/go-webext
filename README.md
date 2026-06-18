@@ -5,6 +5,13 @@ Chrome Web Store, Firefox Add-ons (AMO), and Microsoft Edge Add-ons.
 It supports uploading, updating, publishing, signing, and checking the status
 of extensions via each store's API.
 
+> **Note:** This tool is developed in
+> [AdGuardSoftwareLimited/ext-go-webext](https://github.com/AdGuardSoftwareLimited/ext-go-webext).
+> The [AdguardTeam/go-webext](https://github.com/AdguardTeam/go-webext)
+> repository is a public mirror. The Go module path
+> (`github.com/adguardteam/go-webext`) points to the public mirror so that
+> `go install` works for external consumers.
+
 ## Contents
 
 - [Installation](#installation)

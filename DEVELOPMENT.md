@@ -28,8 +28,8 @@ go install mvdan.cc/gofumpt@latest
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
-cd go-webext
+git clone git@github.com:AdGuardSoftwareLimited/ext-go-webext.git
+cd ext-go-webext
 ```
 
 ### 2. Install dependencies
@@ -103,8 +103,9 @@ go test -race ./...
 
 ### Branching
 
-The CI pipeline (Bamboo) automatically creates builds for pull requests. Create
-a feature branch, push it, and open a PR.
+The CI pipeline (GitHub Actions) automatically runs the `build.yml` workflow
+(test, lint, build) for pull requests. Create a feature branch, push it, and
+open a PR.
 
 ### Before committing
 
@@ -138,12 +139,14 @@ in [AGENTS.md](AGENTS.md). Key points:
 
 ### CI pipeline
 
-The Bamboo pipeline runs two stages:
+The GitHub Actions `build.yml` workflow runs three jobs on every pull request
+and push to `master`, each via Docker:
 
 1. **Test** — `go test -race ./...` in `golang:1.26.1` Docker image
 2. **Lint** — `golangci-lint run -v` in `golangci/golangci-lint:v2.10.1` image
+3. **Build** — verifies the binary compiles
 
-Builds are created automatically for pull requests and deleted after inactivity.
+Builds are created automatically for pull requests.
 
 ## Common Tasks
 
