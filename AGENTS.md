@@ -7,6 +7,12 @@ stores: Chrome Web Store, Firefox Add-ons (AMO), and Microsoft Edge Add-ons.
 It supports uploading, updating, publishing, signing, and checking the status of
 extensions via each store's API.
 
+The package is developed in the private repository
+`AdGuardSoftwareLimited/ext-go-webext` and mirrored to the public repository
+`AdguardTeam/go-webext`. The Go module path
+(`github.com/adguardteam/go-webext`) points to the public mirror so that
+`go install` works for external consumers.
+
 ## Technical Context
 
 - **Language**: Go 1.26
@@ -34,7 +40,6 @@ extensions via each store's API.
 ├── go.mod                     # Module definition and dependencies
 ├── Makefile                   # Build, test, lint, format commands
 ├── .golangci.yml              # Linter configuration (golangci-lint v2)
-├── bamboo-specs/              # CI/CD pipeline definitions
 ├── internal/
 │   ├── cmd/                   # CLI command definitions and wiring
 │   ├── chrome/                # Chrome Web Store client (v1 + v2 APIs)
@@ -43,8 +48,15 @@ extensions via each store's API.
 │   ├── edge/                  # Microsoft Edge Add-ons client (v1 + v1.1 APIs)
 │   ├── fileutil/              # ZIP archive helpers
 │   └── urlutil/               # URL utility functions
-├── specs/                     # Feature specifications (SDD workflow)
+├── .github/
+│   └── workflows/
+│       ├── build.yml              # CI test, lint, build on PRs
+│       ├── mirror.yml             # Mirror to public repo on push to master
+│       ├── prepare-release.yml    # Release PR creation
+│       └── publish-release.yml    # Auto-tag + release pipeline
 ├── README.md                  # User-facing documentation
+├── DEVELOPMENT.md             # Local development setup guide
+├── DEPLOYMENT.md              # Deployment and release process
 └── CHANGELOG.md               # Release history
 ```
 
@@ -123,3 +135,56 @@ extensions via each store's API.
   (`CHROME_API_VERSION`, `EDGE_API_VERSION`).
 - **No `internal/` test exclusion in lint**: Test files are excluded from lint
   via `.golangci.yml` exclusion paths.
+
+### Releases & CI/CD
+
+- **Version source**: The version is derived from git tags. The tag is
+  created by the `publish-release.yml` workflow from the latest version
+  in `CHANGELOG.md`.
+- **Release flow**: The release process follows two steps:
+    1. **Create release PR** — Trigger `prepare-release.yml` via
+       `workflow_dispatch` with the desired tag (e.g. `v0.5.0`). This
+       calls `create-release-pr` which finalizes the `[Unreleased]`
+       section in `CHANGELOG.md` and opens a PR.
+    2. **Merge the PR** — Review and merge the release PR. The
+       `publish-release.yml` workflow triggers automatically on merge,
+       reads the latest version from `CHANGELOG.md`, creates the
+       matching `v{version}` tag, lints and tests via Docker, mirrors
+       to the public repo, creates an assetless GitHub Release, and
+       sends a Slack notification.
+- **Manual release**: `publish-release.yml` can also be triggered
+  manually via `workflow_dispatch` with a ref input (useful for
+  re-running a failed release).
+- **No npm publish**: `go-webext` is a Go module. Consumers install it
+  via `go install github.com/adguardteam/go-webext@v{version}`. The
+  module path points to the public mirror for `go install`
+  compatibility.
+- **Changelog format**: `CHANGELOG.md` follows
+  [Keep a Changelog](https://keepachangelog.com/) with version headings
+  in bracket format (`## [X.Y.Z] - YYYY-MM-DD`).
+
+### Markdown Formatting
+
+All Markdown files MUST follow these formatting rules:
+
+- **Line length**: Keep lines at most 80 characters, but do not wrap
+  lines artificially short just to hit the limit. Lines inside fenced
+  code blocks are exempt from this limit.
+- **Unordered lists**: Use dashes (`-`) for bullet points. Indent nested
+  list items by 4 spaces.
+- **Continuation lines**: When a list item wraps to the next line, align
+  the continuation with the first character of the item text, not the
+  list marker.
+- **Emphasis**: Use asterisks (`*`) for emphasis (`*italic*`,
+  `**bold**`). Do NOT use underscores.
+- **Headings**: Duplicate heading names are allowed only among sibling
+  headings (same parent level). Avoid duplicates across different levels.
+- **Inline HTML**: Avoid raw HTML in Markdown. The only allowed elements
+  are `<a>`, `<p>`, `<details>`, `<summary>`, and `<img>`.
+- **Trailing spaces**: Do NOT leave trailing whitespace on any line. Do
+  NOT use two-space line breaks — use a blank line instead.
+- **Bare URLs**: Bare URLs are permitted and do not need to be wrapped
+  in angle brackets.
+- **Table formatting**: Align table columns with padding when the table
+  fits within 80 characters. If the table exceeds 80 characters, switch
+  to a compact format using single spaces only.
