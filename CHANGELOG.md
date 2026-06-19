@@ -6,8 +6,6 @@
 
 ### Changed
 
-- `CHANGELOG.md` converted to the Keep a Changelog format.
-
 ### Deprecated
 
 ### Removed
@@ -15,6 +13,12 @@
 ### Fixed
 
 ### Security
+
+## [0.4.2] - 2026-06-19
+
+### Changed
+
+- `CHANGELOG.md` converted to the Keep a Changelog format.
 
 ## [0.4.1] - 2026-03-16
 
@@ -70,7 +74,8 @@
 ### Changed
 - We've migrated from using the v4 API to the v5 API of AMO.
 
-[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/AdguardTeam/go-webext/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AdguardTeam/go-webext/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AdguardTeam/go-webext/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AdguardTeam/go-webext/compare/v0.2.1...v0.3.0
