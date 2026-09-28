@@ -399,3 +399,155 @@ func TestPublishStatus(t *testing.T) {
 
 	assert.Equal(t, statusResponse, *response)
 }
+
+func TestPublishStatusAccepted(t *testing.T) {
+	authServer := newAuthServer(t, accessToken)
+	defer authServer.Close()
+
+	accessTokenURL, err := url.Parse(authServer.URL)
+	require.NoError(t, err)
+
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		// The operation is accepted but is not complete yet.
+		w.WriteHeader(http.StatusAccepted)
+
+		_, err := w.Write(nil)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := edge.NewStore(edge.StoreConfig{
+		Client: client,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	response, err := store.PublishStatus(appID, operationID)
+	require.NoError(t, err)
+
+	assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+}
+
+func TestPublish(t *testing.T) {
+	t.Run("waits for successful response", func(t *testing.T) {
+		succeededResponse := edge.PublishStatusResponse{
+			ID:              "",
+			CreatedTime:     "",
+			LastUpdatedTime: "",
+			Status:          "Succeeded",
+			Message:         "",
+			ErrorCode:       "",
+			Errors:          nil,
+		}
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		counter := 0
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/operations") {
+				if counter == 0 {
+					// The operation is accepted but is not complete yet.
+					w.WriteHeader(http.StatusAccepted)
+
+					_, err := w.Write(nil)
+					require.NoError(t, err)
+				} else {
+					marshaledSucceededResponse, err := json.Marshal(succeededResponse)
+					require.NoError(t, err)
+
+					_, err = w.Write(marshaledSucceededResponse)
+					require.NoError(t, err)
+				}
+				counter++
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		response, err := store.Publish(appID, edge.PublishOptions{
+			RetryTimeout: time.Nanosecond,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, succeededResponse, *response)
+	})
+
+	t.Run("throws error on timeout", func(t *testing.T) {
+		publishOptions := edge.PublishOptions{
+			RetryTimeout:      time.Millisecond,
+			WaitStatusTimeout: 2 * time.Millisecond,
+		}
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/operations") {
+				// The operation never completes.
+				w.WriteHeader(http.StatusAccepted)
+
+				_, err := w.Write(nil)
+				require.NoError(t, err)
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		_, err = store.Publish(appID, publishOptions)
+		assert.ErrorContains(t, err, "publish failed due to timeout")
+	})
+}
