@@ -18,16 +18,7 @@ import (
 	"github.com/AdguardTeam/golibs/httphdr"
 )
 
-const (
-	// requestTimeout is the timeout for the HTTP requests.
-	requestTimeout = 30 * time.Second
-
-	// defaultRetryTimeout is the default interval between the operation status checks.
-	defaultRetryTimeout = 5 * time.Second
-
-	// defaultWaitStatusTimeout is the default timeout for waiting for an operation to complete.
-	defaultWaitStatusTimeout = 1 * time.Minute
-)
+const requestTimeout = 30 * time.Second
 
 // API versions
 const (
@@ -245,12 +236,6 @@ type UpdateOptions struct {
 	UploadTimeout     time.Duration
 }
 
-// PublishOptions represents the options for the publish.
-type PublishOptions struct {
-	RetryTimeout      time.Duration
-	WaitStatusTimeout time.Duration
-}
-
 // Insert returns error, because edge store doesn't support insert.
 func (s Store) Insert() (result []byte, err error) {
 	return nil, errors.Error("there is no API for creating a new store item. you must complete these tasks manually in Microsoft Partner Center")
@@ -262,6 +247,9 @@ const DefaultUploadTimeout = 1 * time.Minute
 // Update uploads the update to the store and waits for the update to be processed.
 func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (result *UploadStatusResponse, err error) {
 	l := s.logger.With("action", "Update", "app_id", appID, "file_path", filepath)
+
+	const defaultRetryTimeout = 5 * time.Second
+	const defaultWaitStatusTimeout = 1 * time.Minute
 
 	if updateOptions.RetryTimeout == 0 {
 		updateOptions.RetryTimeout = defaultRetryTimeout
@@ -525,55 +513,17 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 	return response, nil
 }
 
-// Publish publishes the extension to the store and waits for the publish to be processed.
-func (s Store) Publish(appID string, publishOptions PublishOptions) (response *PublishStatusResponse, err error) {
+// Publish publishes the extension to the store.
+func (s Store) Publish(appID string) (response *PublishStatusResponse, err error) {
 	l := s.logger.With("action", "Publish", "app_id", appID)
 	l.Debug("publishing extension")
-
-	if publishOptions.RetryTimeout == 0 {
-		publishOptions.RetryTimeout = defaultRetryTimeout
-	}
-
-	if publishOptions.WaitStatusTimeout == 0 {
-		publishOptions.WaitStatusTimeout = defaultWaitStatusTimeout
-	}
 
 	operationID, err := s.PublishExtension(appID)
 	if err != nil {
 		return nil, fmt.Errorf("publishing extension with appID: %s, error: %w", appID, err)
 	}
 
-	startTime := time.Now()
-
-	for {
-		if time.Now().After(startTime.Add(publishOptions.WaitStatusTimeout)) {
-			return nil, fmt.Errorf("publish failed due to timeout")
-		}
-
-		l.Debug("checking publish status")
-
-		status, err := s.PublishStatus(appID, operationID)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"[Publish] failed to get publish status for appID: %s, with operationID: %s, due to error: %w",
-				appID, operationID, err,
-			)
-		}
-
-		if status.Status == StatusInProgress.String() {
-			l.Debug(
-				"publish status check",
-				"status", "in_progress",
-				"retry_timeout", publishOptions.RetryTimeout,
-			)
-
-			time.Sleep(publishOptions.RetryTimeout)
-
-			continue
-		}
-
-		return status, nil
-	}
+	return s.PublishStatus(appID, operationID)
 }
 
 // AuthorizeResponse describes the response received from the Edge Store
