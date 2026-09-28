@@ -489,7 +489,7 @@ func edgePublishAction(c *cli.Context) error {
 
 	appID := c.String("app")
 
-	result, err := store.Publish(appID, edge.PublishOptions{})
+	result, err := store.Publish(appID)
 	if err != nil {
 		return fmt.Errorf("publishing extension: %w", err)
 	}
