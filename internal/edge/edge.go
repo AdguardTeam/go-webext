@@ -486,6 +486,11 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 	}
 	defer func() { err = errors.WithDeferred(err, res.Body.Close()) }()
 
+	if res.StatusCode == http.StatusAccepted {
+		// The operation is accepted but is not complete yet.
+		return &PublishStatusResponse{Status: StatusInProgress.String()}, nil
+	}
+
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected response %s", res.Status)
 	}

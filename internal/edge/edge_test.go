@@ -399,3 +399,86 @@ func TestPublishStatus(t *testing.T) {
 
 	assert.Equal(t, statusResponse, *response)
 }
+
+func TestPublishStatusAccepted(t *testing.T) {
+	authServer := newAuthServer(t, accessToken)
+	defer authServer.Close()
+
+	accessTokenURL, err := url.Parse(authServer.URL)
+	require.NoError(t, err)
+
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		// The operation is accepted but is not complete yet.
+		w.WriteHeader(http.StatusAccepted)
+
+		_, err := w.Write(nil)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := edge.NewStore(edge.StoreConfig{
+		Client: client,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	response, err := store.PublishStatus(appID, operationID)
+	require.NoError(t, err)
+
+	assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+}
+
+func TestPublish(t *testing.T) {
+	t.Run("returns in-progress response when the operation is not complete", func(t *testing.T) {
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/operations") {
+				// The operation is accepted but is not complete yet.
+				w.WriteHeader(http.StatusAccepted)
+
+				_, err := w.Write(nil)
+				require.NoError(t, err)
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		response, err := store.Publish(appID)
+		require.NoError(t, err)
+
+		assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+	})
+}

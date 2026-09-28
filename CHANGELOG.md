@@ -12,6 +12,9 @@
 
 ### Fixed
 
+- `publish edge` no longer fails when the store reports the publish
+  operation as still in progress
+
 ### Security
 
 ## [0.4.2] - 2026-06-19
