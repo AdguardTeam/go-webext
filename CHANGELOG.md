@@ -12,10 +12,14 @@
 
 ### Fixed
 
+### Security
+
+## [0.4.3] - 2026-10-06
+
+### Fixed
+
 - `publish edge` no longer fails when the store reports the publish
   operation as still in progress
-
-### Security
 
 ## [0.4.2] - 2026-06-19
 
@@ -77,7 +81,8 @@
 ### Changed
 - We've migrated from using the v4 API to the v5 API of AMO.
 
-[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/AdguardTeam/go-webext/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AdguardTeam/go-webext/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AdguardTeam/go-webext/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AdguardTeam/go-webext/compare/v0.3.0...v0.4.0
