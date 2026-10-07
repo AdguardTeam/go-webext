@@ -4,6 +4,9 @@
 
 ### Added
 
+- `update edge` and `publish edge` accept `--skip-if-in-progress`, which
+  treats an in-progress submission as a skip instead of an error
+
 ### Changed
 
 ### Deprecated

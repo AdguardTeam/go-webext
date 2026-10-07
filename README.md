@@ -204,6 +204,8 @@ Firefox update options:
 Edge update options:
 
 - `-t, --timeout`: upload timeout in seconds
+- `--skip-if-in-progress`: treat a submission that is already in progress as
+  a skip instead of an error
 
 #### Publish
 
@@ -253,6 +255,11 @@ Chrome publish options:
 ```sh
 ./go-webext publish edge -a <product_id>
 ```
+
+Edge publish options:
+
+- `--skip-if-in-progress`: treat a submission that is already in progress as
+  a skip instead of an error
 
 #### Sign
 

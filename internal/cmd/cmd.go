@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -410,6 +411,13 @@ func edgeUpdateAction(c *cli.Context) error {
 		UploadTimeout: time.Duration(timeout) * time.Second,
 	})
 	if err != nil {
+		var inProgress *edge.InProgressSubmissionError
+		if c.Bool("skip-if-in-progress") && errors.As(err, &inProgress) {
+			fmt.Printf("edge update skipped: %s\n", inProgress.Message)
+
+			return nil
+		}
+
 		return fmt.Errorf("updating extension: %w", err)
 	}
 
@@ -491,6 +499,13 @@ func edgePublishAction(c *cli.Context) error {
 
 	result, err := store.Publish(appID)
 	if err != nil {
+		var inProgress *edge.InProgressSubmissionError
+		if c.Bool("skip-if-in-progress") && errors.As(err, &inProgress) {
+			fmt.Printf("edge publish skipped: %s\n", inProgress.Message)
+
+			return nil
+		}
+
 		return fmt.Errorf("publishing extension: %w", err)
 	}
 
@@ -554,6 +569,10 @@ func Main() {
 		Aliases:     []string{"t"},
 		Usage:       "timeout in seconds",
 		DefaultText: fmt.Sprintf("%ds", int(edge.DefaultUploadTimeout.Seconds())),
+	}
+	skipIfInProgressFlag := &cli.BoolFlag{
+		Name:  "skip-if-in-progress",
+		Usage: "treat a submission that is already in progress as a skip instead of an error",
 	}
 	verboseFlag := &cli.BoolFlag{
 		Name:     "verbose",
@@ -633,6 +652,7 @@ func Main() {
 				fileFlag,
 				appFlag,
 				timeoutFlag,
+				skipIfInProgressFlag,
 			},
 			Action: edgeUpdateAction,
 		}},
@@ -671,6 +691,7 @@ func Main() {
 			Usage: "publishes extension in the edge store",
 			Flags: []cli.Flag{
 				appFlag,
+				skipIfInProgressFlag,
 			},
 			Action: edgePublishAction,
 		}},

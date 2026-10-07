@@ -218,6 +218,24 @@ type StatusError struct {
 	Message string `json:"message"`
 }
 
+// ErrorCodeInProgressSubmission is the Edge API error code returned when
+// another submission for the product is already in progress.
+const ErrorCodeInProgressSubmission = "InProgressSubmission"
+
+// InProgressSubmissionError is returned when the store refuses an update or a
+// publish because another submission for the product is already in progress.
+// The Edge API has no endpoint that reports the review state, so callers that
+// accept the skip can detect this error and treat it as a no-op.
+type InProgressSubmissionError struct {
+	// Message is the store message.
+	Message string
+}
+
+// Error implements the error interface.
+func (e *InProgressSubmissionError) Error() string {
+	return fmt.Sprintf("a submission is already in progress: %s", e.Message)
+}
+
 // UploadStatusResponse represents the response from the upload status endpoint.
 type UploadStatusResponse struct {
 	ID              string        `json:"id"`
@@ -306,6 +324,10 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 		}
 
 		if status.Status == StatusFailed {
+			if status.ErrorCode == ErrorCodeInProgressSubmission {
+				return nil, &InProgressSubmissionError{Message: status.Message}
+			}
+
 			return nil, fmt.Errorf("update failed due to %s, full error %+v", status.Message, status)
 		}
 	}
@@ -507,6 +529,10 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 	}
 
 	if response.Status == StatusFailed.String() {
+		if response.ErrorCode == ErrorCodeInProgressSubmission {
+			return nil, &InProgressSubmissionError{Message: response.Message}
+		}
+
 		return nil, fmt.Errorf("publish failed due to: \"%s\", full error: %+v", response.Message, response)
 	}
 

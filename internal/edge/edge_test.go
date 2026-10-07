@@ -313,6 +313,61 @@ func TestUpdate(t *testing.T) {
 		_, err = store.Update(appID, filepath, updateOptions)
 		assert.ErrorContains(t, err, "update failed due to timeout")
 	})
+
+	t.Run("returns in-progress submission error", func(t *testing.T) {
+		failedResponse := edge.UploadStatusResponse{
+			ID:              "",
+			CreatedTime:     "",
+			LastUpdatedTime: "",
+			Status:          edge.StatusFailed,
+			Message:         "Can't update extension as your extension submission is in progress.",
+			ErrorCode:       edge.ErrorCodeInProgressSubmission,
+			Errors:          nil,
+		}
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/draft/package/operations") {
+				marshaledFailedResponse, err := json.Marshal(failedResponse)
+				require.NoError(t, err)
+
+				_, err = w.Write(marshaledFailedResponse)
+				require.NoError(t, err)
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		_, err = store.Update(appID, filepath, edge.UpdateOptions{RetryTimeout: time.Nanosecond})
+
+		var inProgress *edge.InProgressSubmissionError
+		require.ErrorAs(t, err, &inProgress)
+		assert.Equal(t, failedResponse.Message, inProgress.Message)
+	})
 }
 
 func TestPublishExtension(t *testing.T) {
@@ -437,6 +492,50 @@ func TestPublishStatusAccepted(t *testing.T) {
 	assert.Equal(t, edge.StatusInProgress.String(), response.Status)
 }
 
+func TestPublishStatusInProgressSubmission(t *testing.T) {
+	statusResponse := edge.PublishStatusResponse{
+		Status:    "Failed",
+		Message:   "Can't publish extension as your extension submission is in progress.",
+		ErrorCode: edge.ErrorCodeInProgressSubmission,
+	}
+
+	authServer := newAuthServer(t, accessToken)
+	defer authServer.Close()
+
+	accessTokenURL, err := url.Parse(authServer.URL)
+	require.NoError(t, err)
+
+	clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+	client := edge.NewClient(clientConfig)
+
+	storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/products/"+appID+"/submissions/operations/"+operationID, r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		response, err := json.Marshal(statusResponse)
+		require.NoError(t, err)
+
+		_, err = w.Write(response)
+		require.NoError(t, err)
+	}))
+	defer storeServer.Close()
+
+	storeURL, err := url.Parse(storeServer.URL)
+	require.NoError(t, err)
+
+	store := edge.NewStore(edge.StoreConfig{
+		Client: client,
+		URL:    storeURL,
+		Logger: slogutil.NewDiscardLogger(),
+	})
+
+	_, err = store.PublishStatus(appID, operationID)
+
+	var inProgress *edge.InProgressSubmissionError
+	require.ErrorAs(t, err, &inProgress)
+	assert.Equal(t, statusResponse.Message, inProgress.Message)
+}
+
 func TestPublish(t *testing.T) {
 	t.Run("returns in-progress response when the operation is not complete", func(t *testing.T) {
 		authServer := newAuthServer(t, accessToken)
@@ -480,5 +579,56 @@ func TestPublish(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+	})
+
+	t.Run("returns in-progress submission error", func(t *testing.T) {
+		failedResponse := edge.PublishStatusResponse{
+			Status:    "Failed",
+			Message:   "Can't publish extension as your extension submission is in progress.",
+			ErrorCode: edge.ErrorCodeInProgressSubmission,
+		}
+
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/operations") {
+				marshaledFailedResponse, err := json.Marshal(failedResponse)
+				require.NoError(t, err)
+
+				_, err = w.Write(marshaledFailedResponse)
+				require.NoError(t, err)
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		_, err = store.Publish(appID)
+
+		var inProgress *edge.InProgressSubmissionError
+		require.ErrorAs(t, err, &inProgress)
+		assert.Equal(t, failedResponse.Message, inProgress.Message)
 	})
 }
