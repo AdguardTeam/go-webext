@@ -4,10 +4,17 @@
 
 ### Added
 
-- `update edge` and `publish edge` accept `--skip-if-in-progress`, which
-  treats an in-progress submission as a skip instead of an error
+- `update edge` and `publish edge` accept `--skip-if-in-progress`, which skips
+  instead of failing when a previous submission is still in review
+  (`InProgressSubmission`), and `--skip-marker` to write a marker file when the
+  operation is skipped
 
 ### Changed
+
+- `publish edge` now polls the publish operation status instead of reading it
+  once, so the `InProgressSubmission` refusal is reported; an operation still
+  in progress when the wait timeout expires is treated as accepted, as the
+  store continues it asynchronously
 
 ### Deprecated
 

@@ -204,8 +204,12 @@ Firefox update options:
 Edge update options:
 
 - `-t, --timeout`: upload timeout in seconds
-- `--skip-if-in-progress`: treat a submission that is already in progress as
-  a skip instead of an error
+- `--skip-if-in-progress`: skip instead of failing when a previous submission
+  is still in review (`InProgressSubmission`); prints `edge update skipped: ...`
+  and exits 0
+- `--skip-marker`: write a marker file at the given path when the operation is
+  skipped; requires `--skip-if-in-progress`. The file is only created on a skip
+  and is never removed by the tool, so use a fresh path (or delete it first)
 
 #### Publish
 
@@ -258,8 +262,12 @@ Chrome publish options:
 
 Edge publish options:
 
-- `--skip-if-in-progress`: treat a submission that is already in progress as
-  a skip instead of an error
+- `--skip-if-in-progress`: skip instead of failing when a previous submission
+  is still in review (`InProgressSubmission`); prints
+  `edge publish skipped: ...` and exits 0
+- `--skip-marker`: write a marker file at the given path when the operation is
+  skipped; requires `--skip-if-in-progress`. The file is only created on a skip
+  and is never removed by the tool, so use a fresh path (or delete it first)
 
 #### Sign
 

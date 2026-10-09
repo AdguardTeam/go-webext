@@ -227,13 +227,17 @@ const ErrorCodeInProgressSubmission = "InProgressSubmission"
 // The Edge API has no endpoint that reports the review state, so callers that
 // accept the skip can detect this error and treat it as a no-op.
 type InProgressSubmissionError struct {
+	// ID is the operation ID reported by the store.
+	ID string
 	// Message is the store message.
 	Message string
+	// ErrorCode is the store error code.
+	ErrorCode string
 }
 
 // Error implements the error interface.
 func (e *InProgressSubmissionError) Error() string {
-	return fmt.Sprintf("a submission is already in progress: %s", e.Message)
+	return fmt.Sprintf("store refused the submission (id: %s, code: %s): %s", e.ID, e.ErrorCode, e.Message)
 }
 
 // UploadStatusResponse represents the response from the upload status endpoint.
@@ -252,6 +256,12 @@ type UpdateOptions struct {
 	RetryTimeout      time.Duration
 	WaitStatusTimeout time.Duration
 	UploadTimeout     time.Duration
+}
+
+// PublishOptions represents the options for the publish.
+type PublishOptions struct {
+	RetryTimeout      time.Duration
+	WaitStatusTimeout time.Duration
 }
 
 // Insert returns error, because edge store doesn't support insert.
@@ -325,7 +335,11 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 
 		if status.Status == StatusFailed {
 			if status.ErrorCode == ErrorCodeInProgressSubmission {
-				return nil, &InProgressSubmissionError{Message: status.Message}
+				return nil, &InProgressSubmissionError{
+					ID:        status.ID,
+					Message:   status.Message,
+					ErrorCode: status.ErrorCode,
+				}
 			}
 
 			return nil, fmt.Errorf("update failed due to %s, full error %+v", status.Message, status)
@@ -530,7 +544,11 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 
 	if response.Status == StatusFailed.String() {
 		if response.ErrorCode == ErrorCodeInProgressSubmission {
-			return nil, &InProgressSubmissionError{Message: response.Message}
+			return nil, &InProgressSubmissionError{
+				ID:        response.ID,
+				Message:   response.Message,
+				ErrorCode: response.ErrorCode,
+			}
 		}
 
 		return nil, fmt.Errorf("publish failed due to: \"%s\", full error: %+v", response.Message, response)
@@ -539,17 +557,77 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 	return response, nil
 }
 
-// Publish publishes the extension to the store.
-func (s Store) Publish(appID string) (response *PublishStatusResponse, err error) {
+// Publish publishes the extension to the store and waits for the publish
+// operation to complete. If the operation is still in progress when the wait
+// timeout expires, it is treated as accepted: the store continues it
+// asynchronously, so a still-running operation must not fail the command.
+func (s Store) Publish(
+	appID string,
+	publishOptions PublishOptions,
+) (response *PublishStatusResponse, err error) {
 	l := s.logger.With("action", "Publish", "app_id", appID)
 	l.Debug("publishing extension")
+
+	const defaultRetryTimeout = 5 * time.Second
+	const defaultWaitStatusTimeout = 1 * time.Minute
+
+	if publishOptions.RetryTimeout == 0 {
+		publishOptions.RetryTimeout = defaultRetryTimeout
+	}
+
+	if publishOptions.WaitStatusTimeout == 0 {
+		publishOptions.WaitStatusTimeout = defaultWaitStatusTimeout
+	}
 
 	operationID, err := s.PublishExtension(appID)
 	if err != nil {
 		return nil, fmt.Errorf("publishing extension with appID: %s, error: %w", appID, err)
 	}
 
-	return s.PublishStatus(appID, operationID)
+	startTime := time.Now()
+
+	var lastStatus *PublishStatusResponse
+
+	for {
+		if time.Now().After(startTime.Add(publishOptions.WaitStatusTimeout)) {
+			l.Warn(
+				"publish operation is still in progress after the wait timeout, treating it as accepted",
+				"wait_status_timeout", publishOptions.WaitStatusTimeout,
+			)
+
+			if lastStatus == nil {
+				lastStatus = &PublishStatusResponse{Status: StatusInProgress.String()}
+			}
+
+			return lastStatus, nil
+		}
+
+		l.Debug("checking publish status")
+
+		status, err := s.PublishStatus(appID, operationID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"publishing extension with appID: %s, operationID: %s: %w",
+				appID, operationID, err,
+			)
+		}
+
+		if status.Status == StatusInProgress.String() {
+			lastStatus = status
+
+			l.Debug(
+				"publish status check",
+				"status", "in_progress",
+				"retry_timeout", publishOptions.RetryTimeout,
+			)
+
+			time.Sleep(publishOptions.RetryTimeout)
+
+			continue
+		}
+
+		return status, nil
+	}
 }
 
 // AuthorizeResponse describes the response received from the Edge Store

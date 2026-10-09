@@ -2,13 +2,13 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
 	"time"
 
+	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/validate"
 	"github.com/adguardteam/go-webext/internal/chrome"
@@ -23,6 +23,9 @@ import (
 const (
 	chromeAPIVersionV1 = "v1"
 	chromeAPIVersionV2 = "v2"
+
+	skipIfInProgressFlagName = "skip-if-in-progress"
+	skipMarkerFlagName       = "skip-marker"
 )
 
 type chromeConfig struct {
@@ -397,10 +400,64 @@ func firefoxUpdateAction(c *cli.Context) error {
 	return nil
 }
 
+// edgeUpdateStore is the subset of the Edge store used by the update command.
+type edgeUpdateStore interface {
+	Update(appID, filepath string, options edge.UpdateOptions) (*edge.UploadStatusResponse, error)
+}
+
+// edgePublishStore is the subset of the Edge store used by the publish command.
+type edgePublishStore interface {
+	Publish(appID string, options edge.PublishOptions) (*edge.PublishStatusResponse, error)
+}
+
+// validateSkipFlags rejects a skip marker without the skip flag: the marker is
+// only written when the operation is allowed to skip, so the combination is a
+// misconfiguration.
+func validateSkipFlags(c *cli.Context) error {
+	if c.String(skipMarkerFlagName) != "" && !c.Bool(skipIfInProgressFlagName) {
+		return fmt.Errorf("%s requires %s", skipMarkerFlagName, skipIfInProgressFlagName)
+	}
+
+	return nil
+}
+
+// handleInProgressSkip reports whether err is a refusal caused by a previous
+// submission still in review and the command should skip it. With the
+// skip-if-in-progress flag set, it prints the skip line, writes the optional
+// marker file, and reports the error as handled.
+func handleInProgressSkip(c *cli.Context, action string, err error) (handled bool, outErr error) {
+	var inProgress *edge.InProgressSubmissionError
+	if !c.Bool(skipIfInProgressFlagName) || !errors.As(err, &inProgress) {
+		return false, nil
+	}
+
+	fmt.Printf("edge %s skipped: %s\n", action, inProgress.Message)
+
+	markerPath := c.String(skipMarkerFlagName)
+	if markerPath == "" {
+		return true, nil
+	}
+
+	content := fmt.Sprintf("edge %s skipped: %s\n", action, inProgress.Message)
+	if writeErr := os.WriteFile(markerPath, []byte(content), 0o600); writeErr != nil {
+		return true, fmt.Errorf("writing skip marker: %w", writeErr)
+	}
+
+	return true, nil
+}
+
 func edgeUpdateAction(c *cli.Context) error {
 	store, err := getEdgeStore()
 	if err != nil {
 		return fmt.Errorf("getting edge store: %w", err)
+	}
+
+	return runEdgeUpdate(c, store)
+}
+
+func runEdgeUpdate(c *cli.Context, store edgeUpdateStore) error {
+	if err := validateSkipFlags(c); err != nil {
+		return err
 	}
 
 	filepath := c.String("file")
@@ -411,11 +468,9 @@ func edgeUpdateAction(c *cli.Context) error {
 		UploadTimeout: time.Duration(timeout) * time.Second,
 	})
 	if err != nil {
-		var inProgress *edge.InProgressSubmissionError
-		if c.Bool("skip-if-in-progress") && errors.As(err, &inProgress) {
-			fmt.Printf("edge update skipped: %s\n", inProgress.Message)
-
-			return nil
+		handled, skipErr := handleInProgressSkip(c, "update", err)
+		if handled {
+			return skipErr
 		}
 
 		return fmt.Errorf("updating extension: %w", err)
@@ -495,15 +550,21 @@ func edgePublishAction(c *cli.Context) error {
 		return fmt.Errorf("getting edge store: %w", err)
 	}
 
+	return runEdgePublish(c, store)
+}
+
+func runEdgePublish(c *cli.Context, store edgePublishStore) error {
+	if err := validateSkipFlags(c); err != nil {
+		return err
+	}
+
 	appID := c.String("app")
 
-	result, err := store.Publish(appID)
+	result, err := store.Publish(appID, edge.PublishOptions{})
 	if err != nil {
-		var inProgress *edge.InProgressSubmissionError
-		if c.Bool("skip-if-in-progress") && errors.As(err, &inProgress) {
-			fmt.Printf("edge publish skipped: %s\n", inProgress.Message)
-
-			return nil
+		handled, skipErr := handleInProgressSkip(c, "publish", err)
+		if handled {
+			return skipErr
 		}
 
 		return fmt.Errorf("publishing extension: %w", err)
@@ -571,8 +632,12 @@ func Main() {
 		DefaultText: fmt.Sprintf("%ds", int(edge.DefaultUploadTimeout.Seconds())),
 	}
 	skipIfInProgressFlag := &cli.BoolFlag{
-		Name:  "skip-if-in-progress",
-		Usage: "treat a submission that is already in progress as a skip instead of an error",
+		Name:  skipIfInProgressFlagName,
+		Usage: "skip when a previous submission is still in review (InProgressSubmission) instead of failing",
+	}
+	skipMarkerFlag := &cli.StringFlag{
+		Name:  skipMarkerFlagName,
+		Usage: "write a marker file at the given path when the operation is skipped (requires --skip-if-in-progress)",
 	}
 	verboseFlag := &cli.BoolFlag{
 		Name:     "verbose",
@@ -653,6 +718,7 @@ func Main() {
 				appFlag,
 				timeoutFlag,
 				skipIfInProgressFlag,
+				skipMarkerFlag,
 			},
 			Action: edgeUpdateAction,
 		}},
@@ -692,6 +758,7 @@ func Main() {
 			Flags: []cli.Flag{
 				appFlag,
 				skipIfInProgressFlag,
+				skipMarkerFlag,
 			},
 			Action: edgePublishAction,
 		}},
