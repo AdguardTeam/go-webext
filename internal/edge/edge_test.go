@@ -414,7 +414,7 @@ func TestPublishStatus(t *testing.T) {
 		ID:              "",
 		CreatedTime:     "",
 		LastUpdatedTime: "",
-		Status:          "Succeeded",
+		Status:          edge.StatusSucceeded,
 		Message:         "",
 		ErrorCode:       "",
 		Errors:          nil,
@@ -491,13 +491,13 @@ func TestPublishStatusAccepted(t *testing.T) {
 	response, err := store.PublishStatus(appID, operationID)
 	require.NoError(t, err)
 
-	assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+	assert.Equal(t, edge.StatusInProgress, response.Status)
 }
 
 func TestPublishStatusInProgressSubmission(t *testing.T) {
 	statusResponse := edge.PublishStatusResponse{
 		ID:        operationID,
-		Status:    "Failed",
+		Status:    edge.StatusFailed,
 		Message:   "Can't publish extension as your extension submission is in progress.",
 		ErrorCode: edge.ErrorCodeInProgressSubmission,
 	}
@@ -568,7 +568,7 @@ func TestPublish(t *testing.T) {
 				}
 
 				response, err := json.Marshal(edge.PublishStatusResponse{
-					Status: edge.StatusSucceeded.String(),
+					Status: edge.StatusSucceeded,
 				})
 				require.NoError(t, err)
 
@@ -598,14 +598,14 @@ func TestPublish(t *testing.T) {
 		response, err := store.Publish(appID, edge.PublishOptions{RetryTimeout: time.Millisecond})
 		require.NoError(t, err)
 
-		assert.Equal(t, edge.StatusSucceeded.String(), response.Status)
+		assert.Equal(t, edge.StatusSucceeded, response.Status)
 		assert.Equal(t, 2, statusCalls)
 	})
 
 	t.Run("polls a 202 and reports the in-progress submission error", func(t *testing.T) {
 		failedResponse := edge.PublishStatusResponse{
 			ID:        operationID,
-			Status:    "Failed",
+			Status:    edge.StatusFailed,
 			Message:   "Can't publish extension as your extension submission is in progress.",
 			ErrorCode: edge.ErrorCodeInProgressSubmission,
 		}
@@ -711,6 +711,46 @@ func TestPublish(t *testing.T) {
 			WaitStatusTimeout: 10 * time.Millisecond,
 		})
 		require.NoError(t, err)
-		assert.Equal(t, edge.StatusInProgress.String(), response.Status)
+		assert.Equal(t, edge.StatusInProgress, response.Status)
+	})
+
+	t.Run("fails on a status the tool does not know", func(t *testing.T) {
+		authServer := newAuthServer(t, accessToken)
+		defer authServer.Close()
+
+		accessTokenURL, err := url.Parse(authServer.URL)
+		require.NoError(t, err)
+
+		clientConfig := edge.NewV1Config(clientID, clientSecret, accessTokenURL)
+		client := edge.NewClient(clientConfig)
+
+		storeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "submissions/operations") {
+				_, err := w.Write([]byte(`{"status":"Cancelled"}`))
+				require.NoError(t, err)
+
+				return
+			}
+
+			w.Header().Set(httphdr.Location, operationID)
+			w.WriteHeader(http.StatusAccepted)
+
+			_, err := w.Write(nil)
+			require.NoError(t, err)
+		}))
+		defer storeServer.Close()
+
+		storeURL, err := url.Parse(storeServer.URL)
+		require.NoError(t, err)
+
+		store := edge.NewStore(edge.StoreConfig{
+			Client: client,
+			URL:    storeURL,
+			Logger: slogutil.NewDiscardLogger(),
+		})
+
+		_, err = store.Publish(appID, edge.PublishOptions{RetryTimeout: time.Millisecond})
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "unknown status: Cancelled")
 	})
 }

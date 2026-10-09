@@ -219,7 +219,9 @@ type StatusError struct {
 }
 
 // ErrorCodeInProgressSubmission is the Edge API error code returned when
-// another submission for the product is already in progress.
+// another submission for the product is already in progress. Microsoft
+// documents it for the publish operation status; an upload normally accepts
+// the package into the draft, so the update-side check is defensive.
 const ErrorCodeInProgressSubmission = "InProgressSubmission"
 
 // InProgressSubmissionError is returned when the store refuses an update or a
@@ -334,6 +336,10 @@ func (s Store) Update(appID, filepath string, updateOptions UpdateOptions) (resu
 		}
 
 		if status.Status == StatusFailed {
+			// The documented refusal path is the publish operation status;
+			// the upload accepts the package into the draft even while a
+			// submission is in review. Keep the check in case the upload
+			// reports the same refusal.
 			if status.ErrorCode == ErrorCodeInProgressSubmission {
 				return nil, &InProgressSubmissionError{
 					ID:        status.ID,
@@ -490,7 +496,7 @@ type PublishStatusResponse struct {
 	ID              string        `json:"id"`
 	CreatedTime     string        `json:"createdTime"`
 	LastUpdatedTime string        `json:"lastUpdatedTime"`
-	Status          string        `json:"status"`
+	Status          Status        `json:"status"`
 	Message         string        `json:"message"`
 	ErrorCode       string        `json:"errorCode"`
 	Errors          []StatusError `json:"errors"`
@@ -524,7 +530,7 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 
 	if res.StatusCode == http.StatusAccepted {
 		// The operation is accepted but is not complete yet.
-		return &PublishStatusResponse{Status: StatusInProgress.String()}, nil
+		return &PublishStatusResponse{Status: StatusInProgress}, nil
 	}
 
 	if res.StatusCode != http.StatusOK {
@@ -542,7 +548,7 @@ func (s Store) PublishStatus(appID, operationID string) (response *PublishStatus
 		return nil, fmt.Errorf("unmarshalling response body: %s, error: %w", responseBody, err)
 	}
 
-	if response.Status == StatusFailed.String() {
+	if response.Status == StatusFailed {
 		if response.ErrorCode == ErrorCodeInProgressSubmission {
 			return nil, &InProgressSubmissionError{
 				ID:        response.ID,
@@ -596,7 +602,7 @@ func (s Store) Publish(
 			)
 
 			if lastStatus == nil {
-				lastStatus = &PublishStatusResponse{Status: StatusInProgress.String()}
+				lastStatus = &PublishStatusResponse{Status: StatusInProgress}
 			}
 
 			return lastStatus, nil
@@ -612,7 +618,8 @@ func (s Store) Publish(
 			)
 		}
 
-		if status.Status == StatusInProgress.String() {
+		switch status.Status {
+		case StatusInProgress:
 			lastStatus = status
 
 			l.Debug(
@@ -624,9 +631,17 @@ func (s Store) Publish(
 			time.Sleep(publishOptions.RetryTimeout)
 
 			continue
+		case StatusSucceeded:
+			return status, nil
+		case StatusFailed:
+			// PublishStatus reports a failed operation as an error, so this
+			// is unreachable today; keep it explicit to mirror Update.
+			return nil, fmt.Errorf("publish failed due to: %q, full error: %+v", status.Message, status)
+		default:
+			// Status.UnmarshalJSON rejects unknown statuses; this guards a
+			// response that was built without it.
+			return nil, fmt.Errorf("unexpected publish status: %s", status.Status)
 		}
-
-		return status, nil
 	}
 }
 

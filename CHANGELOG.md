@@ -12,9 +12,10 @@
 ### Changed
 
 - `publish edge` now polls the publish operation status instead of reading it
-  once, so the `InProgressSubmission` refusal is reported; an operation still
-  in progress when the wait timeout expires is treated as accepted, as the
-  store continues it asynchronously
+  once: the `InProgressSubmission` refusal is reported, a status the tool does
+  not recognize fails the command, and an operation still in progress when the
+  wait timeout expires is treated as accepted, as the store continues it
+  asynchronously
 
 ### Deprecated
 
