@@ -4,6 +4,20 @@
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.4.4] - 2026-10-09
+
+### Added
+
 - `update edge` and `publish edge` accept `--skip-if-in-progress`, which skips
   instead of failing when a previous submission is still in review
   (`InProgressSubmission`), and `--skip-marker` to write a marker file when the
@@ -16,14 +30,6 @@
   not recognize fails the command, and an operation still in progress when the
   wait timeout expires is treated as accepted, as the store continues it
   asynchronously
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.4.3] - 2026-10-06
 
@@ -92,7 +98,8 @@
 ### Changed
 - We've migrated from using the v4 API to the v5 API of AMO.
 
-[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/AdguardTeam/go-webext/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/AdguardTeam/go-webext/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/AdguardTeam/go-webext/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AdguardTeam/go-webext/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AdguardTeam/go-webext/compare/v0.4.0...v0.4.1
